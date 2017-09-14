@@ -1,0 +1,16 @@
+*.exe
+*.exe~
+*.orig
+*.test
+.*.swp
+.DS_Store
+# a .bashrc may be added to customize the build environment
+.bashrc
+.editorconfig
+.gopath/
+.go-pkg-cache/
+autogen/
+.idea/
+vendor/
+logs/
+config/

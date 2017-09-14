@@ -1,0 +1,9 @@
+package: github.com/chenglch/consoleserver
+import:
+- package: github.com/gorilla/mux
+  version: ^1.5.0
+- package: github.com/sirupsen/logrus
+  version: ^1.0.3
+- package: golang.org/x/crypto/ssh
+  subpackages:
+  - terminal
