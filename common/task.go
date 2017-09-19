@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	taskManager *TaskManager
+	taskManager = new(TaskManager)
 )
 
 const (
@@ -48,9 +48,12 @@ func (task *Task) GetID() (id int) {
 }
 
 func NewTaskManager(size int, taskQueueSize int) *TaskManager {
-	taskManager = &TaskManager{maxSize: size, index: 0, total: 0,
-		taskQueueSize: taskQueueSize, taskMap: make(map[int]*Task),
-		actors: make(map[string]int)}
+	taskManager.maxSize = size
+	taskManager.index = 0
+	taskManager.total = 0
+	taskManager.taskQueueSize = taskQueueSize
+	taskManager.taskMap = make(map[int]*Task)
+	taskManager.actors = make(map[string]int)
 	return taskManager
 }
 

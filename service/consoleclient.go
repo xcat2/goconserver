@@ -13,6 +13,7 @@ import (
 	"github.com/chenglch/consoleserver/common"
 	"github.com/chenglch/consoleserver/console"
 	"golang.org/x/crypto/ssh/terminal"
+	"time"
 )
 
 func doSignal(handler common.SignalHandler) {
@@ -119,12 +120,23 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 	m["command"] = "start_console"
 	b, err := json.Marshal(m)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return err
 	}
-	err = c.SendByteWithLength(conn, b)
+	socketTimeout := time.Duration(5)
+	err = c.SendByteWithLengthTimeout(conn, b, socketTimeout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		fmt.Println(socketTimeout)
+		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
+		return err
+	}
+	status, err := c.ReceiveIntTimeout(conn, socketTimeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
+		return err
+	}
+	if status != STATUS_CONNECTED {
+		fmt.Fprintf(os.Stderr, "Fatal error: Could not connect to %s\n", name)
 		return err
 	}
 	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
@@ -178,8 +190,8 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 		os.Exit(1)
 	}
-
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
+	conn, err := net.DialTimeout("tcp", tcpAddr.String(), socketTimeout*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 		os.Exit(1)

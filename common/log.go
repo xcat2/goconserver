@@ -1,23 +1,10 @@
 package common
 
 import (
-	"fmt"
 	"net/http"
-	"os"
 
 	log "github.com/sirupsen/logrus"
 )
-
-func init() {
-	log.SetFormatter(&log.JSONFormatter{})
-	file, err := os.OpenFile(fmt.Sprintf("logs/%s.log", os.Args[0]), os.O_CREATE|os.O_WRONLY, 0666)
-	if err == nil {
-		log.SetOutput(file)
-	} else {
-		log.Info("Failed to log to file, using default stderr")
-	}
-	log.SetLevel(log.InfoLevel)
-}
 
 type Logger struct {
 	plog *log.Entry
@@ -39,11 +26,15 @@ func (l *Logger) HandleHttp(w http.ResponseWriter, req *http.Request, code int, 
 	}
 }
 
-func (l *Logger) ErrorNode(node string, message string) {
+func (l *Logger) ErrorNode(node string, message interface{}) {
 	l.plog.WithFields(log.Fields{"node": node}).Error(message)
 }
 
-func (l *Logger) InfoNode(node string, message string) {
+func (l *Logger) WarningNode(node string, message interface{}) {
+	l.plog.WithFields(log.Fields{"node": node}).Warning(message)
+}
+
+func (l *Logger) InfoNode(node string, message interface{}) {
 	l.plog.WithFields(log.Fields{"node": node}).Info(message)
 }
 
@@ -51,6 +42,6 @@ func (l *Logger) Info(message string) {
 	l.plog.Info(message)
 }
 
-func (l *Logger) Error(err error) {
-	l.plog.Error(err.Error())
+func (l *Logger) Error(err interface{}) {
+	l.plog.Error(err)
 }

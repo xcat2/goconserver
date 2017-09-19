@@ -14,12 +14,8 @@ import (
 )
 
 var (
-	plog *common.Logger
-)
-
-func init() {
 	plog = common.GetLogger("github.com/chenglch/consoleserver/console/console")
-}
+)
 
 type SSHConsole struct {
 	node           string // session name
@@ -31,10 +27,37 @@ type SSHConsole struct {
 	session        *ssh.Session
 }
 
-func NewSSHConsole(host string, port string, user string, password string, pKeyFilepath string, node string) (*SSHConsole, error) {
+func NewSSHConsole(node string, params map[string]string) (*SSHConsole, error) {
+	var password, privateKey, port string
+	if _, ok := params["host"]; !ok {
+		plog.ErrorNode(node, "host parameter is not defined")
+		return nil, errors.New("host parameter is not defined")
+	}
+	host := params["host"]
+	if _, ok := params["port"]; !ok {
+		port = "22"
+	} else {
+		port = params["port"]
+	}
+	if _, ok := params["user"]; !ok {
+		plog.ErrorNode(node, "user parameter is not defined")
+		return nil, errors.New("user parameter is not defined")
+	}
+	user := params["user"]
+	if _, ok := params["password"]; ok {
+		password = params["password"]
+	}
+	if _, ok := params["private_key"]; ok {
+		privateKey = params["privatekey"]
+	}
+	if privateKey == "" && password == "" {
+		plog.ErrorNode(node, "private_key and password, at least one of the parameter should be specified")
+		return nil, errors.New("private_key and password, at least one of the parameter should be specified")
+	}
+
 	var sshInst *SSHConsole
-	if pKeyFilepath != "" {
-		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, privateKeyFile: pKeyFilepath, node: node}
+	if privateKey != "" {
+		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, privateKeyFile: privateKey, node: node}
 	} else if password != "" {
 		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, password: password, node: node}
 	} else {

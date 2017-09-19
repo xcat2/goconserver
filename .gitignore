@@ -12,5 +12,3 @@
 autogen/
 .idea/
 vendor/
-logs/
-config/

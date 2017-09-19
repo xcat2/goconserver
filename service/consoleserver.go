@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"sync"
 
+	"path"
+
 	"github.com/chenglch/consoleserver/common"
 	"github.com/chenglch/consoleserver/console"
 	"github.com/chenglch/consoleserver/plugins"
+	"time"
 )
 
 const (
@@ -23,14 +26,18 @@ const (
 )
 
 var (
-	plog             *common.Logger
-	nodeConfigFile   = "config/nodes.json"
-	globalConfigFile = "consoleserver.json"
-	nodeManager      *NodeManager
+	plog           = common.GetLogger("github.com/chenglch/consoleserver/service/node")
+	nodeManager    *NodeManager
+	serverConfig   *common.ServerConfig
+	nodeConfigFile string
 )
 
 func init() {
-	plog = common.GetLogger("github.com/chenglch/consoleserver/service/node")
+	serverConfig = common.GetServerConfig()
+}
+
+type ConsolePlugin interface {
+	Start() (*console.Console, error)
 }
 
 type Node struct {
@@ -42,9 +49,25 @@ type Node struct {
 }
 
 func (node *Node) StartConsole() {
+	var consolePlugin ConsolePlugin
+	var err error
+	var console *console.Console
 	if node.Driver == SSH_DRIVER_TYPE {
-		node.startSSHConsole()
+		consolePlugin, err = plugins.NewSSHConsole(node.Name, node.Params)
 	}
+	console, err = consolePlugin.Start()
+	if err != nil {
+		node.status = STATUS_ERROR
+	}
+	node.console = console
+	console.Start()
+}
+
+func (node *Node) StopConsole() {
+	if node.console == nil {
+		plog.ErrorNode(node.Name, "Console is not started.")
+	}
+	node.console.Stop()
 }
 
 func (node *Node) SetStatus(status int) {
@@ -55,67 +78,23 @@ func (node *Node) GetStatus() int {
 	return node.status
 }
 
-func (node *Node) startSSHConsole() {
-	var password, privateKey, port string
-
-	if _, ok := node.Params["host"]; !ok {
-		node.status = STATUS_ERROR
-		plog.ErrorNode(node.Name, "host parameter is not defined")
-		return
-	}
-	host := node.Params["host"]
-	if _, ok := node.Params["port"]; !ok {
-		port = "22"
-	} else {
-		port = node.Params["port"]
-	}
-	if _, ok := node.Params["user"]; !ok {
-		node.status = STATUS_ERROR
-		plog.ErrorNode(node.Name, "user parameter is not defined")
-		return
-	}
-	user := node.Params["user"]
-	if _, ok := node.Params["password"]; ok {
-		password = node.Params["password"]
-	}
-	if _, ok := node.Params["private_key"]; ok {
-		privateKey = node.Params["privatekey"]
-	}
-	if privateKey == "" && password == "" {
-		node.status = STATUS_ERROR
-		plog.ErrorNode(node.Name, "private_key and password, at least one of the parameter should be specified")
-		return
-	}
-	sshConsole, err := plugins.NewSSHConsole(host, port, user, password, privateKey, node.Name)
-	if err != nil {
-		plog.ErrorNode(node.Name, err.Error())
-		node.status = STATUS_ERROR
-		return
-	}
-	console, err := sshConsole.Start()
-	if err != nil {
-		plog.ErrorNode(node.Name, err.Error())
-		node.status = STATUS_ERROR
-	}
-	node.console = console
-	console.Start()
-}
-
 type ConsoleServer struct {
 	common.Network
 	host, port string
 }
 
 func NewConsoleServer(host string, port string) *ConsoleServer {
+	nodeManager = GetNodeManager()
 	return &ConsoleServer{host: host, port: port}
 }
 
 func (c *ConsoleServer) handle(conn interface{}) {
-	size, err := c.ReceiveInt(conn.(net.Conn))
+	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
+	size, err := c.ReceiveIntTimeout(conn.(net.Conn), socketTimeout)
 	if err != nil {
 		return
 	}
-	b, err := c.ReceiveBytes(conn.(net.Conn), size)
+	b, err := c.ReceiveBytesTimeout(conn.(net.Conn), size, socketTimeout)
 	if err != nil {
 		return
 	}
@@ -124,11 +103,19 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		plog.Error(err)
 		return
 	}
-	if _, ok := nodeManager.NodeMap[data["name"]]; !ok {
+	if _, ok := nodeManager.Nodes[data["name"]]; !ok {
 		plog.ErrorNode(data["name"], "Could not find this node.")
+		c.SendInt(conn.(net.Conn), STATUS_ERROR)
 		return
 	}
-	node := nodeManager.Nodes[nodeManager.NodeMap[data["name"]]]
+	node := nodeManager.Nodes[data["name"]]
+	if node.console == nil {
+		plog.ErrorNode(node.Name, "The console session to the remote target is not started, refuse this connection from client.")
+		c.SendInt(conn.(net.Conn), STATUS_ERROR)
+		return
+	}
+	// reply success message to the client
+	c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
 	if data["command"] == "start_console" {
 		plog.InfoNode(node.Name, "Register client connection successfully.")
 		node.console.AddConn(conn.(net.Conn))
@@ -152,16 +139,17 @@ func (s *ConsoleServer) Listen() {
 }
 
 type NodeManager struct {
-	Nodes   []*Node
-	NodeMap map[string]int
-	wgMu    sync.RWMutex
+	Nodes map[string]*Node
+	wgMu  sync.RWMutex
 }
 
-func NewNodeManager() *NodeManager {
+func GetNodeManager() *NodeManager {
 	if nodeManager != nil {
 		return nodeManager
 	}
 	nodeManager = new(NodeManager)
+	nodeManager.Nodes = make(map[string]*Node)
+	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
 	if ok, _ := common.PathExists(nodeConfigFile); ok {
 		bytes, err := ioutil.ReadFile(nodeConfigFile)
 		if err != nil {
@@ -174,21 +162,10 @@ func NewNodeManager() *NodeManager {
 			v.SetStatus(STATUS_INIT)
 			common.GetTaskManager().Register(v.StartConsole)
 		}
-		nodeManager.RefreshNodeMap()
 	}
-	consoleServer := NewConsoleServer("127.0.0.1", "12345")
+	consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
 	common.GetTaskManager().Register(consoleServer.Listen)
 	return nodeManager
-}
-
-func (m *NodeManager) RefreshNodeMap() {
-	if m == nil {
-		return
-	}
-	m.NodeMap = make(map[string]int)
-	for i, v := range m.Nodes {
-		m.NodeMap[v.Name] = i
-	}
 }
 
 func (m *NodeManager) Save(w http.ResponseWriter, req *http.Request) error {
@@ -199,7 +176,11 @@ func (m *NodeManager) Save(w http.ResponseWriter, req *http.Request) error {
 		return err
 	}
 	m.wgMu.Lock()
-	common.WriteJsonFile(nodeConfigFile, data)
+	err = common.WriteJsonFile(nodeConfigFile, data)
 	m.wgMu.Unlock()
+	if err != nil {
+		plog.Error(err)
+		return err
+	}
 	return nil
 }

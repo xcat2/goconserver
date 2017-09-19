@@ -6,14 +6,38 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
-	plog *Logger
+	plog = GetLogger("github.com/chenglch/consoleserver/common")
 )
 
 func init() {
-	plog = GetLogger("github.com/chenglch/consoleserver/common")
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetOutput(os.Stderr)
+	serverConfig = new(ServerConfig)
+}
+
+func InitLogger() {
+
+	if serverConfig == nil {
+		log.SetOutput(os.Stderr)
+		return
+	}
+	logFile := serverConfig.Global.LogFile
+	if logFile == "" {
+		log.SetOutput(os.Stderr)
+		return
+	}
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0666)
+	if err == nil {
+		log.SetOutput(f)
+	} else {
+		log.Info("Failed to log to file, using default stderr")
+		log.SetOutput(os.Stderr)
+	}
 }
 
 func WriteJsonFile(filepath string, data []byte) (err error) {
