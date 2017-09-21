@@ -7,7 +7,10 @@ import (
 	"math"
 	"os"
 
+	"errors"
+	"fmt"
 	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 var (
@@ -98,4 +101,18 @@ func BytesToInt(b []byte) int {
 	var tmp int32
 	binary.Read(bytesBuffer, binary.BigEndian, &tmp)
 	return int(tmp)
+}
+
+func TimeoutChan(c chan bool, t int) error {
+	timeout := make(chan bool, 1)
+	go func() {
+		time.Sleep(time.Duration(t) * time.Second)
+		timeout <- true
+	}()
+	select {
+	case <-c:
+	case <-timeout:
+		return errors.New(fmt.Sprintf("Timeout happens after waiting %d seconds", t))
+	}
+	return nil
 }

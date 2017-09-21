@@ -1,4 +1,4 @@
-package service
+package console
 
 import (
 	"encoding/json"
@@ -7,11 +7,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 
 	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/console"
 	"golang.org/x/crypto/ssh/terminal"
 	"time"
 )
@@ -64,7 +62,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	}
 	exit := c.checkEscape(b, n)
 	if exit == -1 {
-		b = []byte(console.ExitSequence)
+		b = []byte(ExitSequence)
 		n = len(b)
 	}
 	c.SendByteWithLength(conn.(net.Conn), b[:n])
@@ -123,7 +121,7 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return err
 	}
-	socketTimeout := time.Duration(5)
+	socketTimeout := time.Duration(15)
 	err = c.SendByteWithLengthTimeout(conn, b, socketTimeout)
 	if err != nil {
 		fmt.Println(socketTimeout)
@@ -171,15 +169,10 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 	}
 	defer common.GetTaskManager().Stop(c.outputTask.GetID())
 	defer conn.Close()
-	for {
-		select {
-		case exit := <-c.exit:
-			if exit {
-				return nil
-			}
-		default:
-			runtime.Gosched()
-		}
+
+	select {
+	case <-c.exit:
+		break
 	}
 	return nil
 }
@@ -194,6 +187,16 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 	conn, err := net.DialTimeout("tcp", tcpAddr.String(), socketTimeout*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		os.Exit(1)
+	}
+	err = conn.(*net.TCPConn).SetKeepAlive(true)
+	if err != nil {
+		fmt.Printf("Cloud not make connection keepalive %s\n", err.Error())
+		os.Exit(1)
+	}
+	err = conn.(*net.TCPConn).SetKeepAlivePeriod(30 * time.Second)
+	if err != nil {
+		fmt.Printf("Cloud not make connection keepalive %s\n", err.Error())
 		os.Exit(1)
 	}
 	return conn, nil

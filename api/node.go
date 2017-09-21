@@ -8,13 +8,19 @@ import (
 	"net/http"
 
 	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/service"
+	"github.com/chenglch/consoleserver/console"
 	"github.com/gorilla/mux"
 )
 
+const (
+	CONSOLE_ON  = "on"
+	CONSOLE_OFF = "off"
+)
+
 var (
-	nodeManager *service.NodeManager
-	plog        = common.GetLogger("github.com/chenglch/consoleserver/api/node")
+	nodeManager  *console.NodeManager
+	plog         = common.GetLogger("github.com/chenglch/consoleserver/api/node")
+	serverConfig = common.GetServerConfig()
 )
 
 type NodeApi struct {
@@ -28,6 +34,7 @@ func NewNodeApi(router *mux.Router) *NodeApi {
 		Route{"Node", "POST", "/nodes", api.post},
 		Route{"Node", "GET", "/nodes/{node}", api.show},
 		Route{"Node", "DELETE", "/nodes/{node}", api.delete},
+		Route{"Node", "PUT", "/nodes/{node}", api.put},
 	}
 	api.routes = routes
 	for _, route := range routes {
@@ -37,7 +44,7 @@ func NewNodeApi(router *mux.Router) *NodeApi {
 			Name(route.Name).
 			Handler(route.HandlerFunc)
 	}
-	nodeManager = service.GetNodeManager()
+	nodeManager = console.GetNodeManager()
 	return &api
 }
 
@@ -62,10 +69,12 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	var resp []byte
 	var err error
 	if !api.exists(vars["node"]) {
+		err = errors.New(fmt.Sprintf("The node %s is not exist.", vars["node"]))
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
 		return
 	}
 	node := nodeManager.Nodes[vars["node"]]
+	node.State = console.STATUS_MAP[node.GetStatus()]
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(node); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -75,8 +84,37 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%s\n", resp)
 }
 
+func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	var err error
+	if !api.exists(vars["node"]) {
+		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		return
+	}
+	if _, ok := req.URL.Query()["state"]; !ok {
+		err = errors.New("Clould not locate the state parameters from URL")
+		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		return
+	}
+	state := req.URL.Query()["state"][0]
+	node := nodeManager.Nodes[vars["node"]]
+	if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
+		common.GetTaskManager().Register(node.StartConsole)
+		go func() {
+			if err = common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+				plog.ErrorNode(node.Name, err)
+			}
+		}()
+	} else if state == CONSOLE_OFF {
+		common.GetTaskManager().Register(node.StopConsole)
+	}
+	plog.InfoNode(node.Name, fmt.Sprintf("The console state has been changed to %s.", state))
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
-	var node service.Node
+	node := console.NewNode()
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -86,25 +124,33 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
 	}
-	if err := json.Unmarshal(body, &node); err != nil {
+	if err := json.Unmarshal(body, node); err != nil {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
 
 	if api.exists(node.Name) {
-		err := errors.New("Already exist")
+		err := errors.New(fmt.Sprintf("THe node name %s is already exist", node.Name))
 		plog.HandleHttp(w, req, http.StatusConflict, err)
 		return
 	}
-	node.SetStatus(service.STATUS_ENROLL)
-	nodeManager.Nodes[node.Name] = &node
+	if err := node.Validate(); err != nil {
+		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		return
+	}
+	node.SetStatus(console.STATUS_ENROLL)
+	nodeManager.Nodes[node.Name] = node
 	if err := nodeManager.Save(w, req); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
-	common.GetTaskManager().Register(node.StartConsole)
+	plog.InfoNode(node.Name, "Created.")
+	if node.Ondemand == false {
+		common.GetTaskManager().Register(node.StartConsole)
+	}
+
 }
 
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
@@ -115,12 +161,15 @@ func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	node := nodeManager.Nodes[vars["node"]]
-	node.StopConsole()
+	if node.GetStatus() == console.STATUS_CONNECTED {
+		node.StopConsole()
+	}
 	delete(nodeManager.Nodes, vars["node"])
 	if err = nodeManager.Save(w, req); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
 	}
+	plog.InfoNode(node.Name, "Deteled.")
 	w.WriteHeader(http.StatusAccepted)
 }
 

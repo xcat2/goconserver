@@ -1,4 +1,4 @@
-package service
+package console
 
 import (
 	"encoding/json"
@@ -10,64 +10,87 @@ import (
 
 	"path"
 
+	"errors"
 	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/console"
 	"github.com/chenglch/consoleserver/plugins"
 	"time"
 )
 
 const (
-	SSH_DRIVER_TYPE = "ssh"
-	STATUS_INIT     = iota
+	STATUS_AVAIABLE = iota
 	STATUS_ENROLL
 	STATUS_CONNECTED
 	STATUS_ERROR
-	STATUS_NOT_SUPPORTED
 )
 
 var (
-	plog           = common.GetLogger("github.com/chenglch/consoleserver/service/node")
+	plog           = common.GetLogger("github.com/chenglch/consoleserver/service")
 	nodeManager    *NodeManager
-	serverConfig   *common.ServerConfig
+	serverConfig   = common.GetServerConfig()
 	nodeConfigFile string
+	STATUS_MAP     = map[int]string{
+		STATUS_AVAIABLE:  "avaiable",
+		STATUS_ENROLL:    "enroll",
+		STATUS_CONNECTED: "connected",
+		STATUS_ERROR:     "error",
+	}
 )
 
-func init() {
-	serverConfig = common.GetServerConfig()
-}
-
-type ConsolePlugin interface {
-	Start() (*console.Console, error)
-}
-
 type Node struct {
-	Name    string            `json:"name"`
-	Driver  string            `json:"driver"` // node type cmd, ssh, ipmitool
-	Params  map[string]string `json:params`
-	status  int
-	console *console.Console
+	Name     string            `json:"name"`
+	Driver   string            `json:"driver"` // node type cmd, ssh, ipmitool
+	Params   map[string]string `json:"params"`
+	Ondemand bool              `json:"ondemand, true"`
+	State    string            // string value of status
+	status   int
+	console  *Console
+	ready    chan bool // indicate session has been established with remote
+}
+
+func NewNode() *Node {
+	node := new(Node)
+	node.ready = make(chan bool, 0) // block client
+	node.status = STATUS_AVAIABLE
+	node.Ondemand = true
+	return node
+}
+
+func (node *Node) Validate() error {
+	if _, ok := plugins.SUPPORTED_DRIVERS[node.Driver]; !ok {
+		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.Driver))
+	}
+	if err := plugins.Validate(node.Driver, node.Name, node.Params); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (node *Node) StartConsole() {
-	var consolePlugin ConsolePlugin
+	var consolePlugin plugins.ConsolePlugin
 	var err error
-	var console *console.Console
-	if node.Driver == SSH_DRIVER_TYPE {
-		consolePlugin, err = plugins.NewSSHConsole(node.Name, node.Params)
-	}
-	console, err = consolePlugin.Start()
+	var baseSession *plugins.BaseSession
+	consolePlugin, err = plugins.StartConsole(node.Driver, node.Name, node.Params)
 	if err != nil {
 		node.status = STATUS_ERROR
+		return
 	}
+	baseSession, err = consolePlugin.Start()
+	if err != nil {
+		node.status = STATUS_ERROR
+		return
+	}
+	console := NewConsole(baseSession, node)
 	node.console = console
 	console.Start()
 }
 
 func (node *Node) StopConsole() {
 	if node.console == nil {
-		plog.ErrorNode(node.Name, "Console is not started.")
+		plog.WarningNode(node.Name, "Console is not started.")
+		return
 	}
 	node.console.Stop()
+	node.status = STATUS_AVAIABLE
 }
 
 func (node *Node) SetStatus(status int) {
@@ -76,6 +99,10 @@ func (node *Node) SetStatus(status int) {
 
 func (node *Node) GetStatus() int {
 	return node.status
+}
+
+func (node *Node) GetReadyChan() chan bool {
+	return node.ready
 }
 
 type ConsoleServer struct {
@@ -89,6 +116,17 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 }
 
 func (c *ConsoleServer) handle(conn interface{}) {
+	plog.Debug("New client connection received.")
+	err := conn.(*net.TCPConn).SetKeepAlive(true)
+	if err != nil {
+		plog.Error(fmt.Sprintf("Cloud not make connection keepalive %s", err.Error()))
+		return
+	}
+	err = conn.(*net.TCPConn).SetKeepAlivePeriod(30 * time.Second)
+	if err != nil {
+		plog.Error(fmt.Sprintf("Cloud not make connection keepalive %s", err.Error()))
+		return
+	}
 	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
 	size, err := c.ReceiveIntTimeout(conn.(net.Conn), socketTimeout)
 	if err != nil {
@@ -109,16 +147,18 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		return
 	}
 	node := nodeManager.Nodes[data["name"]]
-	if node.console == nil {
-		plog.ErrorNode(node.Name, "The console session to the remote target is not started, refuse this connection from client.")
-		c.SendInt(conn.(net.Conn), STATUS_ERROR)
-		return
-	}
-	// reply success message to the client
-	c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
 	if data["command"] == "start_console" {
+		if node.status != STATUS_CONNECTED {
+			common.GetTaskManager().Register(node.StartConsole)
+			if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
+				plog.ErrorNode(node.Name, err)
+				return
+			}
+		}
 		plog.InfoNode(node.Name, "Register client connection successfully.")
-		node.console.AddConn(conn.(net.Conn))
+		// reply success message to the client
+		c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
+		node.console.Accept(conn.(net.Conn))
 	}
 }
 
@@ -159,8 +199,11 @@ func GetNodeManager() *NodeManager {
 			panic(err)
 		}
 		for _, v := range nodeManager.Nodes {
-			v.SetStatus(STATUS_INIT)
-			common.GetTaskManager().Register(v.StartConsole)
+			v.SetStatus(STATUS_AVAIABLE)
+			v.ready = make(chan bool, 0)
+			if v.Ondemand == false {
+				common.GetTaskManager().Register(v.StartConsole)
+			}
 		}
 	}
 	consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)

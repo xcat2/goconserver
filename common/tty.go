@@ -1,4 +1,4 @@
-package console
+package common
 
 import (
 	"errors"
@@ -19,15 +19,15 @@ func (*Tty) size() (int, int, error) {
 	}
 	parts := strings.Split(string(out), " ")
 	if len(parts) != 2 {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported.")
+		return 0, 0, errors.New("The output of 'stty size' command is not supported")
 	}
 	x, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported.")
+		return 0, 0, errors.New("The output of 'stty size' command is not supported")
 	}
 	y, err := strconv.Atoi(strings.Replace(parts[1], "\n", "", 1))
 	if err != nil {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported.")
+		return 0, 0, errors.New("The output of 'stty size' command is not supported")
 	}
 	return int(x), int(y), err
 }

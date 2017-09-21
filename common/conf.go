@@ -27,6 +27,7 @@ type ServerConfig struct {
 		DataDir       string `yaml:"datadir"`
 		LogDir        string `yaml:"logdir"`
 		SocketTimeout int    `yaml:"socket_timeout"`
+		TargetTimeout int    `yaml:"target_timeout"`
 	}
 }
 
@@ -39,6 +40,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.DataDir = "/var/lib/consoleserver/"
 	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
 	serverConfig.Console.SocketTimeout = 10
+	serverConfig.Console.TargetTimeout = 10
 	data, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		return serverConfig, nil

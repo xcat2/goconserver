@@ -9,12 +9,11 @@ import (
 	"fmt"
 
 	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/console"
 	"golang.org/x/crypto/ssh"
 )
 
 var (
-	plog = common.GetLogger("github.com/chenglch/consoleserver/console/console")
+	plog = common.GetLogger("github.com/chenglch/consoleserver/plugins")
 )
 
 type SSHConsole struct {
@@ -48,7 +47,7 @@ func NewSSHConsole(node string, params map[string]string) (*SSHConsole, error) {
 		password = params["password"]
 	}
 	if _, ok := params["private_key"]; ok {
-		privateKey = params["privatekey"]
+		privateKey = params["private_key"]
 	}
 	if privateKey == "" && password == "" {
 		plog.ErrorNode(node, "private_key and password, at least one of the parameter should be specified")
@@ -114,8 +113,8 @@ func (s *SSHConsole) connectToHost() error {
 	return nil
 }
 
-func (s *SSHConsole) startConsole() (*console.Console, error) {
-	tty := console.Tty{}
+func (s *SSHConsole) startConsole() (*BaseSession, error) {
+	tty := common.Tty{}
 	ttyWidth, err := tty.Width()
 	if err != nil {
 		return nil, err
@@ -148,22 +147,21 @@ func (s *SSHConsole) startConsole() (*console.Console, error) {
 		plog.ErrorNode(s.node, err.Error())
 		return nil, err
 	}
-	console := console.NewConsole(sshIn, sshOut, s, s.node)
-	return console, nil
+	return &BaseSession{In: sshIn, Out: sshOut, Session: s}, nil
 }
 
-func (s *SSHConsole) Start() (*console.Console, error) {
+func (s *SSHConsole) Start() (*BaseSession, error) {
 	err := s.connectToHost()
 	if err != nil {
 		plog.ErrorNode(s.node, err.Error())
 		return nil, err
 	}
-	console, err := s.startConsole()
+	baseSession, err := s.startConsole()
 	if err != nil {
 		plog.ErrorNode(s.node, err.Error())
 		return nil, err
 	}
-	return console, nil
+	return baseSession, nil
 }
 
 func (s *SSHConsole) Close() error {

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/service"
+	"github.com/chenglch/consoleserver/console"
 )
 
 func main() {
@@ -14,7 +14,7 @@ func main() {
 	}
 	common.InitLogger()
 	common.NewTaskManager(100, 16)
-	client := service.NewConsoleClient(os.Args[1], os.Args[2])
+	client := console.NewConsoleClient(os.Args[1], os.Args[2])
 	conn, err := client.Connect()
 	if err != nil {
 		panic(err)

@@ -11,6 +11,7 @@ type Logger struct {
 }
 
 func GetLogger(pkg string) *Logger {
+	log.SetLevel(log.DebugLevel)
 	return &Logger{plog: log.WithFields(log.Fields{"pkg": pkg})}
 }
 
@@ -34,6 +35,10 @@ func (l *Logger) WarningNode(node string, message interface{}) {
 	l.plog.WithFields(log.Fields{"node": node}).Warning(message)
 }
 
+func (l *Logger) DebugNode(node string, message interface{}) {
+	l.plog.WithFields(log.Fields{"node": node}).Debug(message)
+}
+
 func (l *Logger) InfoNode(node string, message interface{}) {
 	l.plog.WithFields(log.Fields{"node": node}).Info(message)
 }
@@ -44,4 +49,8 @@ func (l *Logger) Info(message string) {
 
 func (l *Logger) Error(err interface{}) {
 	l.plog.Error(err)
+}
+
+func (l *Logger) Debug(err interface{}) {
+	l.plog.Debug(err)
 }
