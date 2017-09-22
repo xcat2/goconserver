@@ -5,25 +5,31 @@ import (
 	"os"
 )
 
+var (
+	signalSet *SignalSet
+)
+
 type SignalHandler func(s os.Signal, arg interface{})
 
-type signalSet struct {
+type SignalSet struct {
 	m map[os.Signal]SignalHandler
 }
 
-func SignalSetNew() *signalSet {
-	ss := new(signalSet)
-	ss.m = make(map[os.Signal]SignalHandler)
-	return ss
+func GetSignalSet() *SignalSet {
+	if signalSet == nil {
+		signalSet = new(SignalSet)
+		signalSet.m = make(map[os.Signal]SignalHandler)
+	}
+	return signalSet
 }
 
-func (set *signalSet) Register(s os.Signal, handler SignalHandler) {
+func (set *SignalSet) Register(s os.Signal, handler SignalHandler) {
 	if _, found := set.m[s]; !found {
 		set.m[s] = handler
 	}
 }
 
-func (set *signalSet) Handle(sig os.Signal, arg interface{}) (err error) {
+func (set *SignalSet) Handle(sig os.Signal, arg interface{}) (err error) {
 	if _, found := set.m[sig]; found {
 		set.m[sig](sig, arg)
 		return nil
@@ -32,6 +38,6 @@ func (set *signalSet) Handle(sig os.Signal, arg interface{}) (err error) {
 	}
 }
 
-func (set *signalSet) GetSigMap() map[os.Signal]SignalHandler {
+func (set *SignalSet) GetSigMap() map[os.Signal]SignalHandler {
 	return set.m
 }

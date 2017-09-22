@@ -14,12 +14,8 @@ import (
 	"time"
 )
 
-func doSignal(handler common.SignalHandler) {
-	s := common.SignalSetNew()
-	s.Register(syscall.SIGINT, handler)
-	s.Register(syscall.SIGTERM, handler)
-	s.Register(syscall.SIGHUP, handler)
-
+func doSignal() {
+	s := common.GetSignalSet()
 	for {
 		c := make(chan os.Signal)
 		var sigs []os.Signal
@@ -28,10 +24,9 @@ func doSignal(handler common.SignalHandler) {
 		}
 		signal.Notify(c)
 		sig := <-c
-
 		err := s.Handle(sig, nil)
 		if err != nil {
-			fmt.Printf("unknown signal received: %v\n", sig)
+			fmt.Fprintf(os.Stderr, "unknown signal received: %v\n", sig)
 			os.Exit(1)
 		}
 	}
@@ -147,13 +142,7 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 		return err
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
-	handler := func(s os.Signal, arg interface{}) {
-		fmt.Printf("handle signal: %v\n", s)
-		terminal.Restore(int(os.Stdin.Fd()), c.origState)
-		os.Exit(1)
-	}
-	go doSignal(handler)
-
+	c.registerSignal()
 	recvBuf := make([]byte, 4096)
 	sendBuf := make([]byte, 4096)
 	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, sendBuf)
@@ -191,13 +180,28 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 	}
 	err = conn.(*net.TCPConn).SetKeepAlive(true)
 	if err != nil {
-		fmt.Printf("Cloud not make connection keepalive %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "Cloud not make connection keepalive %s\n", err.Error())
 		os.Exit(1)
 	}
 	err = conn.(*net.TCPConn).SetKeepAlivePeriod(30 * time.Second)
 	if err != nil {
-		fmt.Printf("Cloud not make connection keepalive %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "Cloud not make connection keepalive %s\n", err.Error())
 		os.Exit(1)
 	}
 	return conn, nil
+}
+
+func (c *ConsoleClient) registerSignal() {
+	exitHandler := func(s os.Signal, arg interface{}) {
+		fmt.Fprintf(os.Stderr, "handle signal: %v\n", s)
+		terminal.Restore(int(os.Stdin.Fd()), c.origState)
+		os.Exit(1)
+	}
+	signalSet := common.GetSignalSet()
+	signalSet.Register(syscall.SIGINT, exitHandler)
+	signalSet.Register(syscall.SIGTERM, exitHandler)
+	signalSet.Register(syscall.SIGHUP, exitHandler)
+	windowSizeHandler := func(s os.Signal, arg interface{}) {}
+	signalSet.Register(syscall.SIGWINCH, windowSizeHandler)
+	go doSignal()
 }

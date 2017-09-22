@@ -48,3 +48,10 @@ func (t *Tty) Height() (int, error) {
 	}
 	return height, err
 }
+
+func (t *Tty) SetSize(width, height int) error {
+	cmd := exec.Command("stty", "rows", strconv.Itoa(height), "cols", strconv.Itoa(width))
+	cmd.Stdin = os.Stdin
+	_, err := cmd.Output()
+	return err
+}
