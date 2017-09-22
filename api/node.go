@@ -68,13 +68,18 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	var resp []byte
 	var err error
-	if !api.exists(vars["node"]) {
+	if !nodeManager.Exists(vars["node"]) {
 		err = errors.New(fmt.Sprintf("The node %s is not exist.", vars["node"]))
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
 		return
 	}
 	node := nodeManager.Nodes[vars["node"]]
+	if err := node.RequireLock(true); err != nil {
+		plog.HandleHttp(w, req, http.StatusConflict, err)
+		return
+	}
 	node.State = console.STATUS_MAP[node.GetStatus()]
+	node.Release(true)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(node); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -87,7 +92,7 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	var err error
-	if !api.exists(vars["node"]) {
+	if !nodeManager.Exists(vars["node"]) {
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
 		return
 	}
@@ -97,16 +102,31 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	state := req.URL.Query()["state"][0]
+	nodeManager.RWlock.RLock()
 	node := nodeManager.Nodes[vars["node"]]
+	nodeManager.RWlock.RUnlock()
 	if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
-		common.GetTaskManager().Register(node.StartConsole)
+		if err := node.RequireLock(false); err != nil {
+			plog.HandleHttp(w, req, http.StatusConflict, err)
+			return
+		}
+		go node.StartConsole()
+		// open a new groutine to make the rest request asynchronous
 		go func() {
-			if err = common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
-				plog.ErrorNode(node.Name, err)
+			if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+				plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 			}
+			node.Release(false)
 		}()
 	} else if state == CONSOLE_OFF {
-		common.GetTaskManager().Register(node.StopConsole)
+		if err := node.RequireLock(false); err != nil {
+			plog.HandleHttp(w, req, http.StatusConflict, err)
+			return
+		}
+		go func() {
+			node.StopConsole()
+			node.Release(false)
+		}()
 	}
 	plog.InfoNode(node.Name, fmt.Sprintf("The console state has been changed to %s.", state))
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -128,8 +148,9 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-
-	if api.exists(node.Name) {
+	nodeManager.RWlock.Lock()
+	defer nodeManager.RWlock.Unlock()
+	if nodeManager.Exists(node.Name) {
 		err := errors.New(fmt.Sprintf("THe node name %s is already exist", node.Name))
 		plog.HandleHttp(w, req, http.StatusConflict, err)
 		return
@@ -148,15 +169,27 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	plog.InfoNode(node.Name, "Created.")
 	if node.Ondemand == false {
-		common.GetTaskManager().Register(node.StartConsole)
+		if err := node.RequireLock(false); err != nil {
+			plog.HandleHttp(w, req, http.StatusConflict, err)
+			return
+		}
+		go node.StartConsole()
+		// open a new groutine to make the rest request asynchronous
+		go func() {
+			if err = common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+				plog.ErrorNode(node.Name, err)
+			}
+			node.Release(false)
+		}()
 	}
-
 }
 
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	var err error
-	if !api.exists(vars["node"]) {
+	nodeManager.RWlock.Lock()
+	defer nodeManager.RWlock.Unlock()
+	if !nodeManager.Exists(vars["node"]) {
 		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New(fmt.Sprintf("Node %s is not exist", vars["node"])))
 		return
 	}
@@ -171,11 +204,4 @@ func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	}
 	plog.InfoNode(node.Name, "Deteled.")
 	w.WriteHeader(http.StatusAccepted)
-}
-
-func (api *NodeApi) exists(node string) bool {
-	if _, ok := nodeManager.Nodes[node]; ok {
-		return true
-	}
-	return false
 }

@@ -35,7 +35,6 @@ func main() {
 		panic(err)
 	}
 	common.InitLogger()
-	common.NewTaskManager(10000, 16)
 	api.Router = mux.NewRouter().StrictSlash(true)
 	api.NewNodeApi(api.Router)
 	httpServer := &http.Server{

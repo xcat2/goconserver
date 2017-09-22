@@ -10,7 +10,14 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"sync"
 	"time"
+)
+
+const (
+	TYPE_NO_LOCK = iota
+	TYPE_SHARE_LOCK
+	TYPE_EXCLUDE_LOCK
 )
 
 var (
@@ -114,5 +121,56 @@ func TimeoutChan(c chan bool, t int) error {
 	case <-timeout:
 		return errors.New(fmt.Sprintf("Timeout happens after waiting %d seconds", t))
 	}
+	return nil
+}
+
+func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
+	defer func() {
+		if share == true {
+			rwlock.RUnlock()
+		} else {
+			rwlock.Unlock()
+		}
+	}()
+	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
+		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
+	}
+	if share == true {
+		rwlock.RLock()
+	} else {
+		rwlock.Lock()
+	}
+	// with lock and check again
+	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
+		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
+	}
+	if share == true {
+		*reserve = TYPE_SHARE_LOCK
+	} else {
+		*reserve = TYPE_EXCLUDE_LOCK
+	}
+	return nil
+}
+
+func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
+	defer func() {
+		if share == true {
+			rwlock.RUnlock()
+		} else {
+			rwlock.Unlock()
+		}
+	}()
+	if *reserve == TYPE_NO_LOCK {
+		return errors.New(fmt.Sprintf("%s: Not locked"))
+	}
+	if share == true {
+		rwlock.RLock()
+	} else {
+		rwlock.Lock()
+	}
+	if *reserve == TYPE_NO_LOCK {
+		return errors.New(fmt.Sprintf("%s: Not locked"))
+	}
+	*reserve = TYPE_NO_LOCK
 	return nil
 }

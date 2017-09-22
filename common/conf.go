@@ -17,6 +17,7 @@ type ServerConfig struct {
 		SSLCertFile   string `yaml:"ssl_cert_file"`
 		SSLCACertFile string `yaml:"ssl_ca_cert_file"`
 		LogFile       string `yaml:"logfile"`
+		Worker        int    `yaml:"worker"`
 	}
 	API struct {
 		Port        string `yaml:"port"`
@@ -34,6 +35,7 @@ type ServerConfig struct {
 func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.Host = "0.0.0.0"
 	serverConfig.Global.LogFile = ""
+	serverConfig.Global.Worker = 1
 	serverConfig.API.Port = "8089"
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12345"

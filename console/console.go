@@ -166,26 +166,11 @@ func (c *Console) writeClientChan(buf []byte) {
 }
 
 func (c *Console) Start() {
-	var err error
 	plog.DebugNode(c.node.Name, "Start console session.")
-	_, err = common.GetTaskManager().Register(c.writeTarget)
-	if err != nil {
-		c.Close()
-		return
-	}
-	_, err = common.GetTaskManager().Register(c.readTarget)
-	if err != nil {
-		c.Close()
-		return
-	}
-	_, err = common.GetTaskManager().Register(c.writeClient)
-	if err != nil {
-		c.Close()
-		return
-	}
-	if c.node.status != STATUS_CONNECTED {
-		c.node.ready <- true
-	}
+	go c.writeTarget()
+	go c.readTarget()
+	go c.writeClient()
+	c.node.ready <- true
 	c.node.status = STATUS_CONNECTED
 	c.session.Wait()
 	c.session.Close()
