@@ -29,6 +29,7 @@ var (
 	nodeManager    *NodeManager
 	serverConfig   = common.GetServerConfig()
 	nodeConfigFile string
+	nodeBackupFile string
 	STATUS_MAP     = map[int]string{
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
@@ -96,7 +97,6 @@ func (node *Node) StopConsole() {
 	}
 	node.console.Stop()
 	node.status = STATUS_AVAIABLE
-	node.Release(false)
 }
 
 func (node *Node) SetStatus(status int) {
@@ -219,20 +219,10 @@ func GetNodeManager() *NodeManager {
 		nodeManager = new(NodeManager)
 		nodeManager.Nodes = make(map[string]*Node)
 		nodeManager.RWlock = new(sync.RWMutex)
-		nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
 		consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
-		if ok, _ := common.PathExists(nodeConfigFile); ok {
-			bytes, err := ioutil.ReadFile(nodeConfigFile)
-			if err != nil {
-				panic(err)
-			}
-			if err := json.Unmarshal(bytes, &nodeManager.Nodes); err != nil {
-				panic(err)
-			}
-			runtime.GOMAXPROCS(serverConfig.Global.Worker)
-			nodeManager.initNodes()
-		}
+		nodeManager.importNodes()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
+		nodeManager.initNodes()
 		go consoleServer.Listen()
 	}
 	return nodeManager
@@ -268,12 +258,69 @@ func (m *NodeManager) Save(w http.ResponseWriter, req *http.Request) error {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return err
 	}
+	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
+	nodeBackupFile = path.Join(serverConfig.Console.DataDir, "nodes.json.bak")
+	if ok, _ := common.PathExists(nodeConfigFile); ok {
+		_, err = common.CopyFile(nodeBackupFile, nodeConfigFile)
+		if err != nil {
+			plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
+			panic(err)
+		}
+	}
 	err = common.WriteJsonFile(nodeConfigFile, data)
 	if err != nil {
-		plog.Error(err)
-		return err
+		plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
+		panic(err)
 	}
+	go func() {
+		_, err = common.CopyFile(nodeBackupFile, nodeConfigFile)
+		if err != nil {
+			plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
+		}
+	}()
 	return nil
+}
+
+func (m *NodeManager) importNodes() {
+	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
+	useBackup := false
+	if ok, _ := common.PathExists(nodeConfigFile); ok {
+		bytes, err := ioutil.ReadFile(nodeConfigFile)
+		if err != nil {
+			plog.Error(fmt.Sprintf("Could not read node configration file %s.", nodeConfigFile))
+			useBackup = true
+		}
+		if err := json.Unmarshal(bytes, &nodeManager.Nodes); err != nil {
+			plog.Error(fmt.Sprintf("Could not parse node configration file %s.", nodeConfigFile))
+			useBackup = true
+		}
+	} else {
+		useBackup = true
+	}
+	if !useBackup {
+		return
+	}
+	nodeBackupFile = path.Join(serverConfig.Console.DataDir, "nodes.json.bak")
+	if ok, _ := common.PathExists(nodeBackupFile); ok {
+		plog.Info(fmt.Sprintf("Trying to load node bakup file %s.", nodeBackupFile))
+		bytes, err := ioutil.ReadFile(nodeBackupFile)
+		if err != nil {
+			plog.Error(fmt.Sprintf("Could not read nonde backup file %s.", nodeBackupFile))
+			return
+		}
+		if err := json.Unmarshal(bytes, &nodeManager.Nodes); err != nil {
+			plog.Error(fmt.Sprintf("Could not parse node backup file %s.", nodeBackupFile))
+			return
+		}
+		go func() {
+			// as primary file can not be loaded, copy it from backup file
+			_, err = common.CopyFile(nodeConfigFile, nodeBackupFile)
+			if err != nil {
+				plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
+				panic(err)
+			}
+		}()
+	}
 }
 
 func (m *NodeManager) Exists(node string) bool {

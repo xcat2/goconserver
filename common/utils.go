@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"sync"
 	"time"
 )
@@ -173,4 +174,22 @@ func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	}
 	*reserve = TYPE_NO_LOCK
 	return nil
+}
+
+func CopyFile(dst, src string) (int64, error) {
+	s, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer s.Close()
+	d, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return 0, err
+	}
+	d.Truncate(0)
+	if err != nil {
+		return 0, err
+	}
+	defer d.Close()
+	return io.Copy(d, s)
 }

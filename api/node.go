@@ -195,7 +195,12 @@ func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	}
 	node := nodeManager.Nodes[vars["node"]]
 	if node.GetStatus() == console.STATUS_CONNECTED {
+		if err := node.RequireLock(false); err != nil {
+			plog.HandleHttp(w, req, http.StatusConflict, err)
+			return
+		}
 		node.StopConsole()
+		node.RequireLock(false)
 	}
 	delete(nodeManager.Nodes, vars["node"])
 	if err = nodeManager.Save(w, req); err != nil {
