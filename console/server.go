@@ -58,6 +58,13 @@ func NewNode() *Node {
 	return node
 }
 
+func (node *Node) Init(j Node) {
+	node.Params = j.Params
+	node.Name = j.Name
+	node.Driver = j.Driver
+	node.Ondemand = j.Ondemand
+}
+
 func (node *Node) Validate() error {
 	if _, ok := plugins.SUPPORTED_DRIVERS[node.Driver]; !ok {
 		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.Driver))
@@ -232,22 +239,25 @@ func GetNodeManager() *NodeManager {
 
 func (m *NodeManager) initNodes() {
 	for _, v := range nodeManager.Nodes {
-		v.SetStatus(STATUS_AVAIABLE)
-		v.ready = make(chan bool, 0)
-		v.rwLock = new(sync.RWMutex)
-		v.reserve = common.TYPE_NO_LOCK
-		if v.Ondemand == false {
+		node := NewNode()
+		node.Init(*v)
+		if node.Ondemand == false {
 			go func() {
-				if err := v.RequireLock(false); err != nil {
-					plog.ErrorNode(v.Name, "Conflict while starting console.")
+				if err := node.RequireLock(false); err != nil {
+					plog.WarningNode(node.Name, "Conflict while starting console.")
 					return
 				}
-				go v.StartConsole()
-				if err := common.TimeoutChan(v.GetReadyChan(),
-					serverConfig.Console.TargetTimeout); err != nil {
-					plog.ErrorNode(v.Name, err)
+				if node.status == STATUS_CONNECTED {
+					plog.WarningNode(node.Name, "Console has already been started.")
+					node.Release(false)
+					return
 				}
-				v.Release(false)
+				go node.StartConsole()
+				if err := common.TimeoutChan(node.GetReadyChan(),
+					serverConfig.Console.TargetTimeout); err != nil {
+					plog.ErrorNode(node.Name, err)
+				}
+				node.Release(false)
 			}()
 		}
 	}

@@ -129,13 +129,6 @@ func TimeoutChan(c chan bool, t int) error {
 }
 
 func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
-	defer func() {
-		if share == true {
-			rwlock.RUnlock()
-		} else {
-			rwlock.Unlock()
-		}
-	}()
 	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
 		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
 	}
@@ -144,6 +137,13 @@ func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	} else {
 		rwlock.Lock()
 	}
+	defer func() {
+		if share == true {
+			rwlock.RUnlock()
+		} else {
+			rwlock.Unlock()
+		}
+	}()
 	// with lock and check again
 	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
 		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
@@ -157,13 +157,6 @@ func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 }
 
 func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
-	defer func() {
-		if share == true {
-			rwlock.RUnlock()
-		} else {
-			rwlock.Unlock()
-		}
-	}()
 	if *reserve == TYPE_NO_LOCK {
 		return errors.New(fmt.Sprintf("%s: Not locked"))
 	}
@@ -172,6 +165,13 @@ func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	} else {
 		rwlock.Lock()
 	}
+	defer func() {
+		if share == true {
+			rwlock.RUnlock()
+		} else {
+			rwlock.Unlock()
+		}
+	}()
 	if *reserve == TYPE_NO_LOCK {
 		return errors.New(fmt.Sprintf("%s: Not locked"))
 	}

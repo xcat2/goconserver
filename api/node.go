@@ -35,6 +35,9 @@ func NewNodeApi(router *mux.Router) *NodeApi {
 		Route{"Node", "GET", "/nodes/{node}", api.show},
 		Route{"Node", "DELETE", "/nodes/{node}", api.delete},
 		Route{"Node", "PUT", "/nodes/{node}", api.put},
+		Route{"Node", "POST", "/bulk/nodes", api.bulkPost},
+		Route{"Node", "DELETE", "/bulk/nodes", api.bulkDelete},
+		Route{"Node", "PUT", "/bulk/nodes", api.bulkPut},
 	}
 	api.routes = routes
 	for _, route := range routes {
@@ -109,31 +112,70 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	node := nodeManager.Nodes[vars["node"]]
 	nodeManager.RWlock.RUnlock()
 	if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
-		if err := node.RequireLock(false); err != nil {
-			plog.HandleHttp(w, req, http.StatusConflict, err)
-			return
-		}
-		go node.StartConsole()
-		// open a new groutine to make the rest request asynchronous
-		go func() {
-			if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
-				plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-			}
-			node.Release(false)
-		}()
-	} else if state == CONSOLE_OFF {
-		if err := node.RequireLock(false); err != nil {
-			plog.HandleHttp(w, req, http.StatusConflict, err)
-			return
-		}
-		go func() {
-			node.StopConsole()
-			node.Release(false)
-		}()
+		api.startConsole(node)
+	} else if state == CONSOLE_OFF && node.GetStatus() == console.STATUS_CONNECTED {
+		api.stopConsole(node)
 	}
 	plog.InfoNode(node.Name, fmt.Sprintf("The console state has been changed to %s.", state))
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
+	var err error
+	var resp []byte
+	if _, ok := req.URL.Query()["state"]; !ok {
+		err = errors.New("Clould not locate the state parameters from URL")
+		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		return
+	}
+	state := req.URL.Query()["state"][0]
+	nodes := make(map[string][]console.Node, 0)
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := req.Body.Close(); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := json.Unmarshal(body, &nodes); err != nil {
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		return
+	}
+	result := make(map[string]string)
+	for _, v := range nodes["nodes"] {
+		if v.Name == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
+		}
+		nodeManager.RWlock.Lock()
+		if !nodeManager.Exists(v.Name) {
+			msg := "Skip this node as node is not exist."
+			plog.ErrorNode(v.Name, msg)
+			result[v.Name] = msg
+			nodeManager.RWlock.Unlock()
+			continue
+		}
+		node := nodeManager.Nodes[v.Name]
+		nodeManager.RWlock.Unlock()
+		if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
+			api.startConsole(node)
+		} else if state == CONSOLE_OFF && node.GetStatus() == console.STATUS_CONNECTED {
+			api.stopConsole(node)
+		}
+		result[v.Name] = "Updated"
+	}
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	if resp, err = json.Marshal(result); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+	fmt.Fprintf(w, "%s\n", resp)
 }
 
 func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
@@ -155,7 +197,7 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 	nodeManager.RWlock.Lock()
 	if nodeManager.Exists(node.Name) {
 		err := errors.New(fmt.Sprintf("THe node name %s is already exist", node.Name))
-		plog.HandleHttp(w, req, http.StatusConflict, err)
+		plog.HandleHttp(w, req, http.StatusAlreadyReported, err)
 		nodeManager.RWlock.Unlock()
 		return
 	}
@@ -172,19 +214,66 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	plog.InfoNode(node.Name, "Created.")
 	if node.Ondemand == false {
-		if err := node.RequireLock(false); err != nil {
-			plog.HandleHttp(w, req, http.StatusConflict, err)
-			return
-		}
-		go node.StartConsole()
-		// open a new groutine to make the rest request asynchronous
-		go func() {
-			if err = common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
-				plog.ErrorNode(node.Name, err)
-			}
-			node.Release(false)
-		}()
+		api.startConsole(node)
 	}
+}
+
+func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
+	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
+	var resp []byte
+	nodes := make(map[string][]console.Node, 0)
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := req.Body.Close(); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := json.Unmarshal(body, &nodes); err != nil {
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		return
+	}
+	result := make(map[string]string)
+	for _, v := range nodes["nodes"] {
+		// the silce pointer will be changed with the for loop, create a new variable.
+		node := console.NewNode()
+		node.Init(v)
+		if node.Name == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
+		}
+		if node.Driver == "" {
+			msg := "Skip this record as node driver is not defined."
+			plog.ErrorNode(node.Name, msg)
+			result[node.Name] = msg
+			continue
+		}
+		nodeManager.RWlock.Lock()
+		if nodeManager.Exists(node.Name) {
+			msg := "Skip this node as node is exist."
+			plog.ErrorNode(node.Name, msg)
+			result[node.Name] = msg
+			nodeManager.RWlock.Unlock()
+			continue
+		}
+		node.SetStatus(console.STATUS_ENROLL)
+		nodeManager.Nodes[node.Name] = node
+		nodeManager.RWlock.Unlock()
+		result[node.Name] = "Created"
+		if node.Ondemand == false {
+			api.startConsole(node)
+		}
+	}
+	nodeManager.MakePersist()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	if resp, err = json.Marshal(result); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, "%s\n", resp)
 }
 
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
@@ -198,17 +287,90 @@ func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	}
 	node := nodeManager.Nodes[vars["node"]]
 	if node.GetStatus() == console.STATUS_CONNECTED {
-		if err := node.RequireLock(false); err != nil {
-			plog.HandleHttp(w, req, http.StatusConflict, err)
-			nodeManager.RWlock.Unlock()
-			return
-		}
-		node.StopConsole()
-		node.RequireLock(false)
+		go api.stopConsole(node)
 	}
 	delete(nodeManager.Nodes, vars["node"])
 	nodeManager.RWlock.Unlock()
 	nodeManager.MakePersist()
 	plog.InfoNode(node.Name, "Deteled.")
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
+	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
+	var resp []byte
+	nodes := make(map[string][]console.Node, 0)
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := req.Body.Close(); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	if err := json.Unmarshal(body, &nodes); err != nil {
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		return
+	}
+	result := make(map[string]string)
+	for _, v := range nodes["nodes"] {
+		if v.Name == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
+		}
+		nodeManager.RWlock.Lock()
+		if !nodeManager.Exists(v.Name) {
+			msg := "Skip this node as node is not exist."
+			plog.ErrorNode(v.Name, msg)
+			result[v.Name] = msg
+			nodeManager.RWlock.Unlock()
+			continue
+		}
+		node := nodeManager.Nodes[v.Name]
+		if node.GetStatus() == console.STATUS_CONNECTED {
+			go api.stopConsole(node)
+		}
+		delete(nodeManager.Nodes, v.Name)
+		nodeManager.RWlock.Unlock()
+		result[v.Name] = "Deleted"
+	}
+	nodeManager.MakePersist()
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	if resp, err = json.Marshal(result); err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%s\n", resp)
+}
+
+func (api *NodeApi) startConsole(node *console.Node) {
+	if err := node.RequireLock(false); err != nil {
+		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+		return
+	}
+	if node.GetStatus() == console.STATUS_CONNECTED {
+		node.Release(false)
+		return
+	}
+	go node.StartConsole()
+	// open a new groutine to make the rest request asynchronous
+	go func() {
+		if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+			plog.ErrorNode(node.Name, err)
+		}
+		node.Release(false)
+	}()
+}
+
+func (api *NodeApi) stopConsole(node *console.Node) {
+	if err := node.RequireLock(false); err != nil {
+		nodeManager.RWlock.Unlock()
+		return
+	}
+	if node.GetStatus() == console.STATUS_CONNECTED {
+		node.StopConsole()
+	}
+	node.Release(false)
 }
