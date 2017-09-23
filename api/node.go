@@ -49,6 +49,7 @@ func NewNodeApi(router *mux.Router) *NodeApi {
 }
 
 func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
+	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
 	var resp []byte
 	var err error
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -66,6 +67,7 @@ func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
 
 func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
+	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	var resp []byte
 	var err error
 	if !nodeManager.Exists(vars["node"]) {
@@ -91,6 +93,7 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 
 func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
+	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	var err error
 	if !nodeManager.Exists(vars["node"]) {
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
@@ -134,6 +137,7 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 }
 
 func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
+	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
 	node := console.NewNode()
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -149,22 +153,21 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	nodeManager.RWlock.Lock()
-	defer nodeManager.RWlock.Unlock()
 	if nodeManager.Exists(node.Name) {
 		err := errors.New(fmt.Sprintf("THe node name %s is already exist", node.Name))
 		plog.HandleHttp(w, req, http.StatusConflict, err)
+		nodeManager.RWlock.Unlock()
 		return
 	}
 	if err := node.Validate(); err != nil {
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		nodeManager.RWlock.Unlock()
 		return
 	}
 	node.SetStatus(console.STATUS_ENROLL)
 	nodeManager.Nodes[node.Name] = node
-	if err := nodeManager.Save(w, req); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
-		return
-	}
+	nodeManager.RWlock.Unlock()
+	nodeManager.MakePersist()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
 	plog.InfoNode(node.Name, "Created.")
@@ -186,27 +189,26 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	var err error
+	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	nodeManager.RWlock.Lock()
-	defer nodeManager.RWlock.Unlock()
 	if !nodeManager.Exists(vars["node"]) {
 		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New(fmt.Sprintf("Node %s is not exist", vars["node"])))
+		nodeManager.RWlock.Unlock()
 		return
 	}
 	node := nodeManager.Nodes[vars["node"]]
 	if node.GetStatus() == console.STATUS_CONNECTED {
 		if err := node.RequireLock(false); err != nil {
 			plog.HandleHttp(w, req, http.StatusConflict, err)
+			nodeManager.RWlock.Unlock()
 			return
 		}
 		node.StopConsole()
 		node.RequireLock(false)
 	}
 	delete(nodeManager.Nodes, vars["node"])
-	if err = nodeManager.Save(w, req); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
-		return
-	}
+	nodeManager.RWlock.Unlock()
+	nodeManager.MakePersist()
 	plog.InfoNode(node.Name, "Deteled.")
 	w.WriteHeader(http.StatusAccepted)
 }

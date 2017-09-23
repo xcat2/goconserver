@@ -2,18 +2,15 @@ package console
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net"
-	"net/http"
-	"sync"
-
-	"path"
-
 	"errors"
+	"fmt"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/chenglch/consoleserver/plugins"
+	"io/ioutil"
+	"net"
+	"path"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -210,19 +207,24 @@ func (s *ConsoleServer) Listen() {
 }
 
 type NodeManager struct {
-	Nodes  map[string]*Node
-	RWlock *sync.RWMutex
+	Nodes       map[string]*Node
+	RWlock      *sync.RWMutex
+	persistence uint32 // 0 no pending data, 1 has pending data
+	pending     chan bool
 }
 
 func GetNodeManager() *NodeManager {
 	if nodeManager == nil {
 		nodeManager = new(NodeManager)
 		nodeManager.Nodes = make(map[string]*Node)
+		nodeManager.persistence = 0
+		nodeManager.pending = make(chan bool, 1) // make it non-block
 		nodeManager.RWlock = new(sync.RWMutex)
 		consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
 		nodeManager.importNodes()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
 		nodeManager.initNodes()
+		go nodeManager.doPersist()
 		go consoleServer.Listen()
 	}
 	return nodeManager
@@ -251,13 +253,16 @@ func (m *NodeManager) initNodes() {
 	}
 }
 
-func (m *NodeManager) Save(w http.ResponseWriter, req *http.Request) error {
+func (m *NodeManager) Save() {
 	var data []byte
 	var err error
+	m.RWlock.Lock()
 	if data, err = json.Marshal(m.Nodes); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
-		return err
+		m.RWlock.Unlock()
+		plog.Error(fmt.Sprintf("Could not Marshal the node map: %s.", err))
+		panic(err)
 	}
+	m.RWlock.Unlock()
 	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
 	nodeBackupFile = path.Join(serverConfig.Console.DataDir, "nodes.json.bak")
 	if ok, _ := common.PathExists(nodeConfigFile); ok {
@@ -278,7 +283,6 @@ func (m *NodeManager) Save(w http.ResponseWriter, req *http.Request) error {
 			plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
 		}
 	}()
-	return nil
 }
 
 func (m *NodeManager) importNodes() {
@@ -321,6 +325,15 @@ func (m *NodeManager) importNodes() {
 			}
 		}()
 	}
+}
+
+func (m *NodeManager) MakePersist() {
+	common.Notify(m.pending, &m.persistence, 1)
+}
+
+// a separate thread to save the data, avoid of frequent IO
+func (m *NodeManager) doPersist() {
+	common.Wait(m.pending, &m.persistence, 0, m.Save)
 }
 
 func (m *NodeManager) Exists(node string) bool {

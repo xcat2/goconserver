@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,6 +20,8 @@ const (
 	TYPE_NO_LOCK = iota
 	TYPE_SHARE_LOCK
 	TYPE_EXCLUDE_LOCK
+
+	SLEEP_TICK = 100 // millisecond
 )
 
 var (
@@ -192,4 +195,22 @@ func CopyFile(dst, src string) (int64, error) {
 	}
 	defer d.Close()
 	return io.Copy(d, s)
+}
+
+func Notify(c chan bool, addr *uint32, val uint32) {
+	old := atomic.SwapUint32(addr, val)
+	if old != val {
+		c <- true
+	}
+}
+
+func Wait(c chan bool, addr *uint32, val uint32, fc interface{}) {
+	for {
+		time.Sleep(time.Duration(SLEEP_TICK * time.Millisecond))
+		select {
+		case <-c:
+			atomic.SwapUint32(addr, val)
+			fc.(func())()
+		}
+	}
 }
