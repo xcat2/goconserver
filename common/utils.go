@@ -66,6 +66,13 @@ func WriteJsonFile(filepath string, data []byte) (err error) {
 	return
 }
 
+func PrintJson(b []byte) {
+	var out bytes.Buffer
+	json.Indent(&out, b, "", "\t")
+	out.WriteTo(os.Stdout)
+	fmt.Printf("\n")
+}
+
 func PathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {

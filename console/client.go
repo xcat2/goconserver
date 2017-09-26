@@ -11,6 +11,9 @@ import (
 
 	"github.com/chenglch/consoleserver/common"
 	"golang.org/x/crypto/ssh/terminal"
+	"net/http"
+	neturl "net/url"
+	"strings"
 	"time"
 )
 
@@ -116,14 +119,13 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return err
 	}
-	socketTimeout := time.Duration(15)
-	err = c.SendByteWithLengthTimeout(conn, b, socketTimeout)
+	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
+	err = c.SendByteWithLengthTimeout(conn, b, consoleTimeout)
 	if err != nil {
-		fmt.Println(socketTimeout)
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return err
 	}
-	status, err := c.ReceiveIntTimeout(conn, socketTimeout)
+	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return err
@@ -172,8 +174,9 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 		os.Exit(1)
 	}
-	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
-	conn, err := net.DialTimeout("tcp", tcpAddr.String(), socketTimeout*time.Second)
+	clientConfig := common.GetClientConfig()
+	clientTimeout := time.Duration(clientConfig.ConsoleTimeout)
+	conn, err := net.DialTimeout("tcp", tcpAddr.String(), clientTimeout*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 		os.Exit(1)
@@ -204,4 +207,74 @@ func (c *ConsoleClient) registerSignal() {
 	windowSizeHandler := func(s os.Signal, arg interface{}) {}
 	signalSet.Register(syscall.SIGWINCH, windowSizeHandler)
 	go doSignal()
+}
+
+type CongoClient struct {
+	client  *common.HttpClient
+	baseUrl string
+}
+
+func NewCongoClient(baseUrl string) *CongoClient {
+	baseUrl = strings.TrimSuffix(baseUrl, "/")
+	client := &common.HttpClient{Client: http.DefaultClient, Headers: http.Header{}}
+	return &CongoClient{client: client, baseUrl: baseUrl}
+}
+
+func (c *CongoClient) List() ([]interface{}, error) {
+	url := fmt.Sprintf("%s/nodes", c.baseUrl)
+	var nodes []interface{}
+	ret, err := c.client.Get(url, nil, nil, false)
+	if err != nil {
+		return nodes, err
+	}
+	val, ok := ret.(map[string]interface{})["nodes"].([]interface{})
+	if !ok {
+		return nodes, errors.New("The data received from server is not correct.")
+	}
+	return val, nil
+}
+
+func (c *CongoClient) Show(node string) (interface{}, error) {
+	url := fmt.Sprintf("%s/nodes/%s", c.baseUrl, node)
+	var ret interface{}
+	ret, err := c.client.Get(url, nil, nil, true)
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
+}
+
+func (c *CongoClient) Logging(node string, state string) (interface{}, error) {
+	url := fmt.Sprintf("%s/nodes/%s", c.baseUrl, node)
+	params := neturl.Values{}
+	params.Set("state", state)
+	var ret interface{}
+	ret, err := c.client.Put(url, &params, nil, false)
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
+}
+
+func (c *CongoClient) Delete(node string) (interface{}, error) {
+	url := fmt.Sprintf("%s/nodes/%s", c.baseUrl, node)
+	var ret interface{}
+	ret, err := c.client.Delete(url, nil, nil, false)
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
+}
+
+func (c *CongoClient) Create(node string, attribs map[string]interface{}, params map[string]interface{}) (interface{}, error) {
+	url := fmt.Sprintf("%s/nodes", c.baseUrl)
+	data := attribs
+	data["params"] = params
+	data["name"] = node
+	var ret interface{}
+	ret, err := c.client.Post(url, nil, data, false)
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
 }

@@ -58,6 +58,7 @@ func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	nodes := make(map[string][]string)
+	nodes["nodes"] = make([]string,0)
 	for _, node := range nodeManager.Nodes {
 		nodes["nodes"] = append(nodes["nodes"], node.Name)
 	}
@@ -194,15 +195,22 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	nodeManager.RWlock.Lock()
-	if nodeManager.Exists(node.Name) {
-		err := errors.New(fmt.Sprintf("THe node name %s is already exist", node.Name))
-		plog.HandleHttp(w, req, http.StatusAlreadyReported, err)
-		nodeManager.RWlock.Unlock()
+	if node.Name == "" {
+		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New("Skip this record as node name is not defined"))
+		return
+	}
+	if node.Driver == "" {
+		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New("Driver is not defined"))
 		return
 	}
 	if err := node.Validate(); err != nil {
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		return
+	}
+	nodeManager.RWlock.Lock()
+	if nodeManager.Exists(node.Name) {
+		err := errors.New(fmt.Sprintf("The node name %s is already exist", node.Name))
+		plog.HandleHttp(w, req, http.StatusAlreadyReported, err)
 		nodeManager.RWlock.Unlock()
 		return
 	}
@@ -238,14 +246,20 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 	result := make(map[string]string)
 	for _, v := range nodes["nodes"] {
 		// the silce pointer will be changed with the for loop, create a new variable.
-		node := console.NewNode()
-		node.Init(v)
+		node := v
+		node.Init()
 		if node.Name == "" {
 			plog.Error("Skip this record as node name is not defined.")
 			continue
 		}
 		if node.Driver == "" {
-			msg := "Skip this record as node driver is not defined."
+			msg := "Driver is not defined."
+			plog.ErrorNode(node.Name, msg)
+			result[node.Name] = msg
+			continue
+		}
+		if err := node.Validate(); err != nil {
+			msg := "Failed to validate the node property."
 			plog.ErrorNode(node.Name, msg)
 			result[node.Name] = msg
 			continue
@@ -259,11 +273,11 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		node.SetStatus(console.STATUS_ENROLL)
-		nodeManager.Nodes[node.Name] = node
+		nodeManager.Nodes[node.Name] = &node
 		nodeManager.RWlock.Unlock()
 		result[node.Name] = "Created"
 		if node.Ondemand == false {
-			api.startConsole(node)
+			api.startConsole(&node)
 		}
 	}
 	nodeManager.MakePersist()

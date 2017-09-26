@@ -4,6 +4,9 @@ import:
   version: ^1.5.0
 - package: github.com/sirupsen/logrus
   version: ^1.0.3
-- package: golang.org/x/crypto/ssh
+- package: github.com/spf13/cobra
+- package: golang.org/x/crypto
   subpackages:
-  - terminal
+  - ssh
+  - ssh/terminal
+- package: gopkg.in/yaml.v2

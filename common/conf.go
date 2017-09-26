@@ -4,10 +4,13 @@ import (
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
+	"os"
+	"strconv"
 )
 
 var (
 	serverConfig *ServerConfig
+	clientConfig *ClientConfig
 )
 
 type ServerConfig struct {
@@ -27,7 +30,7 @@ type ServerConfig struct {
 		Port          string `yaml:"port"`
 		DataDir       string `yaml:"datadir"`
 		LogDir        string `yaml:"logdir"`
-		SocketTimeout int    `yaml:"socket_timeout"`
+		ClientTimeout int    `yaml:"client_timeout"`
 		TargetTimeout int    `yaml:"target_timeout"`
 	}
 }
@@ -38,11 +41,11 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.Worker = 1
 	serverConfig.API.Port = "8089"
 	serverConfig.API.HttpTimeout = 10
-	serverConfig.Console.Port = "12345"
+	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/consoleserver/"
 	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
-	serverConfig.Console.SocketTimeout = 10
-	serverConfig.Console.TargetTimeout = 10
+	serverConfig.Console.ClientTimeout = 30
+	serverConfig.Console.TargetTimeout = 30
 	data, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		return serverConfig, nil
@@ -56,4 +59,52 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 
 func GetServerConfig() *ServerConfig {
 	return serverConfig
+}
+
+type ClientConfig struct {
+	SSLKeyFile     string
+	SSLCertFile    string
+	SSLCACertFile  string
+	HTTPUrl        string
+	ConsolePort    string
+	ConsoleTimeout int
+	ServerHost     string
+}
+
+func NewClientConfig() (*ClientConfig, error) {
+	var err error
+	clientConfig = new(ClientConfig)
+	clientConfig.HTTPUrl = "http://127.0.0.1:8089"
+	clientConfig.ServerHost = "127.0.0.1"
+	clientConfig.ConsolePort = "12430"
+	clientConfig.ConsoleTimeout = 30
+	if os.Getenv("CONGO_URL") != "" {
+		clientConfig.HTTPUrl = os.Getenv("CONGO_URL")
+	}
+	if os.Getenv("CONGO_SERVER_HOST") != "" {
+		clientConfig.ServerHost = os.Getenv("CONGO_SERVER_HOST")
+	}
+	if os.Getenv("CONGO_PORT") != "" {
+		clientConfig.ConsolePort = os.Getenv("CONGO_PORT")
+	}
+	if os.Getenv("CONGO_CONSOLE_TIMEOUT") != "" {
+		clientConfig.ConsoleTimeout, err = strconv.Atoi(os.Getenv("CONGO_CONSOLE_TIMEOUT"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if os.Getenv("CONGO_SSL_KEY") != "" {
+		clientConfig.SSLKeyFile = os.Getenv("CONGO_SSL_KEY")
+	}
+	if os.Getenv("CONGO_SSL_CERT") != "" {
+		clientConfig.SSLCertFile = os.Getenv("CONGO_PORT")
+	}
+	if os.Getenv("CONGO_SSL_CA_CERT") != "" {
+		clientConfig.SSLCACertFile = os.Getenv("CONGO_SSL_CA_CERT")
+	}
+	return clientConfig, nil
+}
+
+func GetClientConfig() *ClientConfig {
+	return clientConfig
 }

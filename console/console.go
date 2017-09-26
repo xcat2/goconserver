@@ -108,14 +108,14 @@ func (c *Console) writeTarget() {
 func (c *Console) innerWriteClient(conn net.Conn) {
 	plog.DebugNode(c.node.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
-	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
+	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	for {
 		if _, ok := c.bufConn[conn]; !ok {
 			plog.ErrorNode(c.node.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
 		b := <-c.bufConn[conn]
-		err := c.network.SendByteWithLengthTimeout(conn, b, socketTimeout)
+		err := c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
 			plog.WarningNode(c.node.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
@@ -166,6 +166,9 @@ func (c *Console) writeClientChan(buf []byte) {
 }
 
 func (c *Console) Start() {
+	defer func() {
+		c.node.status = STATUS_AVAIABLE
+	}()
 	plog.DebugNode(c.node.Name, "Start console session.")
 	go c.writeTarget()
 	go c.readTarget()
@@ -191,6 +194,7 @@ func (c *Console) Close() {
 		delete(c.bufConn, k)
 	}
 	c.session.Close()
+	c.node.status = STATUS_AVAIABLE
 }
 
 func (c *Console) logger(path string, b []byte) error {

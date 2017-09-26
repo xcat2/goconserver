@@ -58,11 +58,11 @@ func NewNode() *Node {
 	return node
 }
 
-func (node *Node) Init(j Node) {
-	node.Params = j.Params
-	node.Name = j.Name
-	node.Driver = j.Driver
-	node.Ondemand = j.Ondemand
+func (node *Node) Init() {
+	node.rwLock = new(sync.RWMutex)
+	node.reserve = common.TYPE_NO_LOCK
+	node.ready = make(chan bool, 0) // block client
+	node.status = STATUS_AVAIABLE
 }
 
 func (node *Node) Validate() error {
@@ -92,6 +92,23 @@ func (node *Node) StartConsole() {
 	console := NewConsole(baseSession, node)
 	node.console = console
 	console.Start()
+	if node.Ondemand == false {
+		if err := node.RequireLock(false); err != nil {
+			plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+			return
+		}
+		if node.GetStatus() == STATUS_CONNECTED {
+			node.Release(false)
+			return
+		}
+		plog.InfoNode(node.Name, "Start console again due to the ondemand setting.")
+		go node.StartConsole()
+		if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
+			plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
+			node.Release(false)
+			return
+		}
+	}
 }
 
 func (node *Node) StopConsole() {
@@ -146,13 +163,13 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		conn.(net.Conn).Close()
 		return
 	}
-	socketTimeout := time.Duration(serverConfig.Console.SocketTimeout)
-	size, err := c.ReceiveIntTimeout(conn.(net.Conn), socketTimeout)
+	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
+	size, err := c.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
 	if err != nil {
 		conn.(net.Conn).Close()
 		return
 	}
-	b, err := c.ReceiveBytesTimeout(conn.(net.Conn), size, socketTimeout)
+	b, err := c.ReceiveBytesTimeout(conn.(net.Conn), size, clientTimeout)
 	if err != nil {
 		conn.(net.Conn).Close()
 		return
@@ -239,8 +256,8 @@ func GetNodeManager() *NodeManager {
 
 func (m *NodeManager) initNodes() {
 	for _, v := range nodeManager.Nodes {
-		node := NewNode()
-		node.Init(*v)
+		node := v
+		node.Init()
 		if node.Ondemand == false {
 			go func() {
 				if err := node.RequireLock(false); err != nil {
