@@ -196,11 +196,11 @@ func CopyFile(dst, src string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer d.Close()
 	d.Truncate(0)
 	if err != nil {
 		return 0, err
 	}
-	defer d.Close()
 	return io.Copy(d, s)
 }
 

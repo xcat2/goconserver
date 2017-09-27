@@ -205,6 +205,7 @@ func (c *Console) logger(path string, b []byte) error {
 			plog.ErrorNode(c.node.Name, err)
 			return err
 		}
+		defer fd.Close()
 		l := len(b)
 		for l > 0 {
 			n, err := fd.Write(b)
@@ -214,7 +215,6 @@ func (c *Console) logger(path string, b []byte) error {
 			}
 			l -= n
 		}
-		fd.Close()
 	}
 	return nil
 }

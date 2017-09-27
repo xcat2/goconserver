@@ -75,6 +75,23 @@ func (node *Node) Validate() error {
 	return nil
 }
 
+func (node *Node) restartConsole() {
+	if err := node.RequireLock(false); err != nil {
+		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+		return
+	}
+	if node.GetStatus() == STATUS_CONNECTED {
+		node.Release(false)
+		return
+	}
+	go node.StartConsole()
+	if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
+		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
+		node.Release(false)
+		return
+	}
+}
+
 func (node *Node) StartConsole() {
 	var consolePlugin plugins.ConsolePlugin
 	var err error
@@ -82,32 +99,27 @@ func (node *Node) StartConsole() {
 	consolePlugin, err = plugins.StartConsole(node.Driver, node.Name, node.Params)
 	if err != nil {
 		node.status = STATUS_ERROR
+		node.ready <- false
+		plog.ErrorNode(node.Name, "Could not start console, wait 5 seconds and try again")
+		time.Sleep(time.Duration(5) * time.Second)
+		go node.restartConsole()
 		return
 	}
 	baseSession, err = consolePlugin.Start()
 	if err != nil {
 		node.status = STATUS_ERROR
+		node.ready <- false
+		plog.ErrorNode(node.Name, "Could not start console, wait 5 seconds and try again")
+		time.Sleep(time.Duration(5) * time.Second)
+		go node.restartConsole()
 		return
 	}
 	console := NewConsole(baseSession, node)
 	node.console = console
 	console.Start()
 	if node.Ondemand == false {
-		if err := node.RequireLock(false); err != nil {
-			plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
-			return
-		}
-		if node.GetStatus() == STATUS_CONNECTED {
-			node.Release(false)
-			return
-		}
 		plog.InfoNode(node.Name, "Start console again due to the ondemand setting.")
-		go node.StartConsole()
-		if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
-			plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-			node.Release(false)
-			return
-		}
+		node.restartConsole()
 	}
 }
 
@@ -203,19 +215,26 @@ func (c *ConsoleServer) handle(conn interface{}) {
 				if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 					node.Release(false)
+					c.SendInt(conn.(net.Conn), STATUS_ERROR)
+					conn.(net.Conn).Close()
 					return
 				}
 			}
 		}
-		plog.InfoNode(node.Name, "Register client connection successfully.")
-		// reply success message to the client
-		c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
-		node.console.Accept(conn.(net.Conn))
+		if node.status == STATUS_CONNECTED {
+			plog.InfoNode(node.Name, "Register client connection successfully.")
+			// reply success message to the client
+			c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
+			node.console.Accept(conn.(net.Conn))
+		} else {
+			c.SendInt(conn.(net.Conn), STATUS_ERROR)
+			conn.(net.Conn).Close()
+		}
 	}
 }
 
-func (s *ConsoleServer) Listen() {
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", s.host, s.port))
+func (c *ConsoleServer) Listen() {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
 	if err != nil {
 		plog.Error(err)
 		return
@@ -226,7 +245,7 @@ func (s *ConsoleServer) Listen() {
 			plog.Error(err)
 			return
 		}
-		go s.handle(conn)
+		go c.handle(conn)
 	}
 }
 

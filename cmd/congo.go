@@ -1,9 +1,37 @@
 package main
 
 import (
+	"fmt"
 	"github.com/chenglch/consoleserver/console"
+	"github.com/spf13/cobra"
 )
 
+var (
+	Version   string
+	BuildTime string
+	Commit    string
+)
+
+func versionCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print the version number of congo",
+		Long:  `Print the version number of congo`,
+		Run:   version,
+	}
+	return cmd
+}
+
+func version(cmd *cobra.Command, args []string) {
+	fmt.Printf("Version: %s, BuildTime: %s\n Commit: %s\n", Version, BuildTime, Commit)
+}
+
 func main() {
-	console.NewCongoCli()
+	cmd := &cobra.Command{
+		Use:   "Congo",
+		Short: "This is golang client for consoleserver",
+		Long: `Congo --help and congo help COMMAND to see the usage for specfied
+	command.`}
+	cmd.AddCommand(versionCommand())
+	console.NewCongoCli(cmd)
 }

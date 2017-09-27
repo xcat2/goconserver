@@ -58,7 +58,7 @@ func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	nodes := make(map[string][]string)
-	nodes["nodes"] = make([]string,0)
+	nodes["nodes"] = make([]string, 0)
 	for _, node := range nodeManager.Nodes {
 		nodes["nodes"] = append(nodes["nodes"], node.Name)
 	}

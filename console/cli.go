@@ -11,7 +11,6 @@ import (
 
 var (
 	createParams string
-	configFile   string
 	clientConfig *common.ClientConfig
 )
 
@@ -57,7 +56,7 @@ type CongoCli struct {
 	cmd     *cobra.Command
 }
 
-func NewCongoCli() {
+func NewCongoCli(cmd *cobra.Command) {
 	var err error
 	cli := new(CongoCli)
 	clientConfig, err = common.NewClientConfig()
@@ -66,13 +65,7 @@ func NewCongoCli() {
 		os.Exit(1)
 	}
 	cli.baseUrl = clientConfig.HTTPUrl
-	cli.cmd = &cobra.Command{
-		Use:   "Congo",
-		Short: "This is golang client for consoleserver",
-		Long: `Congo --help and congo help COMMAND to see the usage for specfied
-	command.`}
-	cli.cmd.Flags().StringVarP(&configFile, "config-file", "c", "",
-		`The configuration file of congo client.`)
+	cli.cmd = cmd
 	cli.cmd.AddCommand(cli.listCommand())
 	cli.cmd.AddCommand(cli.showCommand())
 	cli.cmd.AddCommand(cli.loggingCommand())
