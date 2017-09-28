@@ -97,7 +97,7 @@ func NewClientConfig() (*ClientConfig, error) {
 		clientConfig.SSLKeyFile = os.Getenv("CONGO_SSL_KEY")
 	}
 	if os.Getenv("CONGO_SSL_CERT") != "" {
-		clientConfig.SSLCertFile = os.Getenv("CONGO_PORT")
+		clientConfig.SSLCertFile = os.Getenv("CONGO_SSL_CERT")
 	}
 	if os.Getenv("CONGO_SSL_CA_CERT") != "" {
 		clientConfig.SSLCACertFile = os.Getenv("CONGO_SSL_CA_CERT")

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"crypto/tls"
 	"github.com/chenglch/consoleserver/common"
 	"golang.org/x/crypto/ssh/terminal"
 	"net/http"
@@ -191,6 +192,14 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 		fmt.Fprintf(os.Stderr, "Cloud not make connection keepalive %s\n", err.Error())
 		os.Exit(1)
 	}
+	if clientConfig.SSLCertFile != "" && clientConfig.SSLKeyFile != "" && clientConfig.SSLCACertFile != "" {
+		conn = tls.Client(conn, common.LoadClientTlsConfig(clientConfig.SSLCertFile, clientConfig.SSLKeyFile,
+			clientConfig.SSLCACertFile, clientConfig.ServerHost))
+		err = conn.(*tls.Conn).Handshake()
+		if err != nil {
+			return nil, err
+		}
+	}
 	return conn, nil
 }
 
@@ -216,7 +225,13 @@ type CongoClient struct {
 
 func NewCongoClient(baseUrl string) *CongoClient {
 	baseUrl = strings.TrimSuffix(baseUrl, "/")
+	clientConfig := common.GetClientConfig()
 	client := &common.HttpClient{Client: http.DefaultClient, Headers: http.Header{}}
+	if strings.HasPrefix(baseUrl, "https") && clientConfig.SSLKeyFile != "" &&
+		clientConfig.SSLCertFile != "" && clientConfig.SSLCACertFile != "" {
+		client.Client.Transport = &http.Transport{TLSClientConfig: common.LoadClientTlsConfig(clientConfig.SSLCertFile,
+			clientConfig.SSLKeyFile, clientConfig.SSLCACertFile, clientConfig.ServerHost)}
+	}
 	return &CongoClient{client: client, baseUrl: baseUrl}
 }
 

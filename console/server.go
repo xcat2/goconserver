@@ -1,6 +1,7 @@
 package console
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,8 @@ const (
 	STATUS_ENROLL
 	STATUS_CONNECTED
 	STATUS_ERROR
+
+	COMMAND_START_CONSOLE = "start_console"
 )
 
 var (
@@ -164,17 +167,6 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 
 func (c *ConsoleServer) handle(conn interface{}) {
 	plog.Debug("New client connection received.")
-	err := conn.(*net.TCPConn).SetKeepAlive(true)
-	if err != nil {
-		plog.Error(fmt.Sprintf("Cloud not make connection keepalive %s", err.Error()))
-		return
-	}
-	err = conn.(*net.TCPConn).SetKeepAlivePeriod(30 * time.Second)
-	if err != nil {
-		plog.Error(fmt.Sprintf("Cloud not make connection keepalive %s", err.Error()))
-		conn.(net.Conn).Close()
-		return
-	}
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	size, err := c.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
 	if err != nil {
@@ -200,7 +192,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		return
 	}
 	node := nodeManager.Nodes[data["name"]]
-	if data["command"] == "start_console" {
+	if data["command"] == COMMAND_START_CONSOLE {
 		if node.status != STATUS_CONNECTED {
 			if err := node.RequireLock(false); err != nil {
 				plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
@@ -234,7 +226,15 @@ func (c *ConsoleServer) handle(conn interface{}) {
 }
 
 func (c *ConsoleServer) Listen() {
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
+	var listener net.Listener
+	var err error
+	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
+		tlsConfig := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
+			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile)
+		listener, err = tls.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port), tlsConfig)
+	} else {
+		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
+	}
 	if err != nil {
 		plog.Error(err)
 		return

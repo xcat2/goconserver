@@ -1,6 +1,10 @@
 package common
 
 import (
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"net"
 	"time"
 )
@@ -117,4 +121,37 @@ func (s *Network) SendByteWithLengthTimeout(conn net.Conn, b []byte, timeout tim
 		return err
 	}
 	return s.ResetWriteTimeout(conn)
+}
+
+func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string) *tls.Config {
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		panic(err)
+	}
+	pool := x509.NewCertPool()
+	caCert, err := ioutil.ReadFile(caCertPath)
+	if err != nil {
+		panic(err)
+	}
+	pool.AppendCertsFromPEM(caCert)
+	tlsConfig := tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, ServerName: serverHost}
+	tlsConfig.BuildNameToCertificate()
+	return &tlsConfig
+}
+
+func LoadServerTlsConfig(certPath string, keyPath string, caCertPath string) *tls.Config {
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		panic(err)
+	}
+	pool := x509.NewCertPool()
+	caCert, err := ioutil.ReadFile(caCertPath)
+	if err != nil {
+		panic(err)
+	}
+	pool.AppendCertsFromPEM(caCert)
+	tlsConfig := tls.Config{ClientCAs: pool, Certificates: []tls.Certificate{cert},
+		ClientAuth: tls.RequireAnyClientCert}
+	tlsConfig.Rand = rand.Reader
+	return &tlsConfig
 }

@@ -6,10 +6,13 @@ import (
 
 	"fmt"
 
+	"crypto/tls"
+	"crypto/x509"
 	"github.com/chenglch/consoleserver/api"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
+	"io/ioutil"
 	"os"
 	"time"
 )
@@ -21,6 +24,7 @@ var (
 	Version   string
 	BuildTime string
 	Commit    string
+	sslEnable = false
 )
 
 func init() {
@@ -30,6 +34,19 @@ func init() {
 		Long:  `Consoleserver daemon service`}
 	ServerCmd.Flags().StringVarP(&confFile, "config-file", "c", "/etc/consoleserver/server.conf", "Specify the configuration file for consoleserver daemon.")
 	ServerCmd.Flags().BoolVarP(&showVer, "version", "v", false, "Show the version of consoleserver.")
+}
+
+func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {
+	pool := x509.NewCertPool()
+	caCertPath := serverConfig.Global.SSLCACertFile
+	caCrt, err := ioutil.ReadFile(caCertPath)
+	if err != nil {
+		sslEnable = false
+		return nil
+	}
+	pool.AppendCertsFromPEM(caCrt)
+	sslEnable = true
+	return &tls.Config{ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert}
 }
 
 func main() {
@@ -53,5 +70,15 @@ func main() {
 		Addr:         fmt.Sprintf("%s:%s", serverConfig.Global.Host, serverConfig.API.Port),
 		Handler:      api.Router,
 	}
-	log.Fatal(httpServer.ListenAndServe())
+	if serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" && serverConfig.Global.SSLCACertFile != "" {
+		tlsConfig := loadTlsConfig(serverConfig)
+		if sslEnable {
+			httpServer.TLSConfig = tlsConfig
+		}
+	}
+	if sslEnable {
+		log.Fatal(httpServer.ListenAndServeTLS(serverConfig.Global.SSLCertFile, serverConfig.Global.SSLKeyFile))
+	} else {
+		log.Fatal(httpServer.ListenAndServe())
+	}
 }
