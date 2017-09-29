@@ -1,25 +1,70 @@
-## consoleserver (development stage)
-This is a console server written in golang which can be integrate with [xcat3](https://github.com/chenglch/xcat3).
-As openbmc is using ssh as the console, ssh plugin is implemented at first, ipmi or command plugin will be added in
-the future.
+## consoleserver
+
+`consoleserver` is written in golang and is a part of microservice of
+[xcat3](https://github.com/chenglch/xcat3). It can work as a independent
+tool to provide the terminal session service. Terminal session could run in
+the background and help logging the terminal content.
+
+### Support plugin
+`consoleserver` intent to support multiple types of terminal plugins, currently
+only `ssh` is support as OpenBMC use `ssh` as the SOL method. Command line
+session is in the TODO list.
+
+### Structure
+`consoleserver` can be divided into two parts:
+- daemon part: `consoleserver`, expose rest api interface to define and control
+  the session node.
+
+- client part: `congo`, a command line tool to define session or connect to the
+  session. Multiple client session could be shared.
 
 ## Setup
 
-Setup golang and the environment of GOPATH and GOBIN at first. Then running the following command:
+### Requirement
+
+Currently, this tool is in the development stage, there is no binary release.
+Please setup golang SDK and GOPATH environment at first.
+
+### Build and installation
 
 ```
-go get -v github.com/chenglch/consoleserver
+git clone https://github.com/chenglch/consoleserver.git
+cd consoleserver
+make install
+```
 
+### Setup SSL (optional)
+
+Please refer to [ssl](/scripts/ssl/)
+
+## Command Example
+
+### Start service
+daemon is running in the background.
+```
+consoleserver &
+```
+### Define testnode node session
+congo is the client command. Use congo help to see the detail.
+```
+congo create testnode driver=ssh ondemand=false --params user=root,host=10.5.102.73,port=22,password=<password>
+```
+or
+```
+congo create testnode driver=ssh ondemand=false --params user=root,host=10.5.102.73,port=22,private_key=<priavte_key_path>
+```
+
+### List or show detail
+```
+congo list
+congo show testnode
+```
+
+### Connect to the testnode session
+```
+congo console testnode
 ```
 
 ## Rest API
-Currently only rest api can be used to register or unregister the node.
 
-```
-[root@xcat3 ~]# curl -XPOST 'http://localhost:8089/nodes' -H Content-Type:application/json  -d '{"name": "node4", "driver": "ssh", "params": {"user":"chenglch", "host":"xx.xx.xx.xx","port":"22", "password":"xxxxx"}}'
-[root@xcat3 ~]# curl -XGET 'http://localhost:8089/nodes' -H Content-Type:application/json
-[root@xcat3 ~]# curl -XGET 'http://localhost:8089/nodes/node4' -H Content-Type:application/json
-[root@xcat3 ~]# curl -XDELETE 'http://localhost:8089/nodes/node4' -H Content-Type:application/json
-```
-
-## TODO
+Please refer to [rest api](/api/)
