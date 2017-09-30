@@ -7,8 +7,8 @@ the background and help logging the terminal content.
 
 ### Support plugin
 `consoleserver` intent to support multiple types of terminal plugins, currently
-only `ssh` is support as OpenBMC use `ssh` as the SOL method. Command line
-session is in the TODO list.
+`ssh` is support as OpenBMC use `ssh` as the SOL method and `cmd` is a normal
+driver to support command session.
 
 ### Structure
 `consoleserver` can be divided into two parts:
@@ -49,9 +49,13 @@ congo is the client command. Use congo help to see the detail.
 ```
 congo create testnode driver=ssh ondemand=false --params user=root,host=10.5.102.73,port=22,password=<password>
 ```
-or
+or with ssh private key
 ```
 congo create testnode driver=ssh ondemand=false --params user=root,host=10.5.102.73,port=22,private_key=<priavte_key_path>
+```
+or command driver
+```
+congo create testnode driver=cmd ondemand=false --params cmd="ssh -l root -p 22 10.5.102.73"
 ```
 
 ### List or show detail

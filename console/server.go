@@ -79,6 +79,10 @@ func (node *Node) Validate() error {
 }
 
 func (node *Node) restartConsole() {
+	if _, ok := nodeManager.Nodes[node.Name]; !ok {
+		plog.WarningNode(node.Name, "node has alrealy been removed.")
+		return
+	}
 	if err := node.RequireLock(false); err != nil {
 		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
 		return
@@ -103,7 +107,7 @@ func (node *Node) StartConsole() {
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.Name, "Could not start console, wait 5 seconds and try again")
+		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
 		time.Sleep(time.Duration(5) * time.Second)
 		go node.restartConsole()
 		return
@@ -112,7 +116,7 @@ func (node *Node) StartConsole() {
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.Name, "Could not start console, wait 5 seconds and try again")
+		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
 		time.Sleep(time.Duration(5) * time.Second)
 		go node.restartConsole()
 		return
@@ -122,6 +126,7 @@ func (node *Node) StartConsole() {
 	console.Start()
 	if node.Ondemand == false {
 		plog.InfoNode(node.Name, "Start console again due to the ondemand setting.")
+		time.Sleep(time.Duration(5) * time.Second)
 		node.restartConsole()
 	}
 }

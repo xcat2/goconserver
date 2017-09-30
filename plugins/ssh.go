@@ -12,10 +12,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var (
-	plog = common.GetLogger("github.com/chenglch/consoleserver/plugins")
-)
-
 type SSHConsole struct {
 	node           string // session name
 	user           string

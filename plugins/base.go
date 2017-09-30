@@ -3,17 +3,21 @@ package plugins
 import (
 	"errors"
 	"fmt"
+	"github.com/chenglch/consoleserver/common"
 	"io"
 )
 
 const (
-	SSH_DRIVER_TYPE = "ssh"
+	DRIVER_SSH = "ssh"
+	DRIVER_CMD = "cmd"
 )
 
 var (
 	SUPPORTED_DRIVERS = map[string]bool{
-		SSH_DRIVER_TYPE: true,
+		DRIVER_SSH: true,
+		DRIVER_CMD: true,
 	}
+	plog = common.GetLogger("github.com/chenglch/consoleserver/plugins")
 )
 
 type ConsoleSession interface {
@@ -35,18 +39,20 @@ type ConsolePlugin interface {
 func StartConsole(driver string, name string, params map[string]string) (ConsolePlugin, error) {
 	var consolePlugin ConsolePlugin
 	var err error
-	if driver == SSH_DRIVER_TYPE {
+	if driver == DRIVER_SSH {
 		consolePlugin, err = NewSSHConsole(name, params)
 		if err != nil {
 			plog.ErrorNode(name, fmt.Sprintf("Could not start ssh console for node %s.", name))
 			return nil, err
 		}
+	} else if driver == DRIVER_CMD {
+		consolePlugin = NewCommondConsole(name, params)
 	}
 	return consolePlugin, nil
 }
 
 func Validate(driver string, name string, params map[string]string) error {
-	if driver == SSH_DRIVER_TYPE {
+	if driver == DRIVER_SSH {
 		if _, ok := params["host"]; !ok {
 			return errors.New(fmt.Sprintf("node %s: Parameter host is not defined", name))
 		}
@@ -57,6 +63,11 @@ func Validate(driver string, name string, params map[string]string) error {
 		_, ok2 := params["private_key"]
 		if !ok1 && !ok2 {
 			return errors.New(fmt.Sprintf("node %s: At least one of the parameter within private_key and password should be specified", name))
+		}
+		return nil
+	} else if driver == DRIVER_CMD {
+		if _, ok := params["cmd"]; !ok {
+			return errors.New(fmt.Sprintf("node %s: Please specify the command", name))
 		}
 		return nil
 	}
