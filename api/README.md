@@ -49,12 +49,12 @@ POST /bulk/nodes
 GET /nodes
 
 ### Show the detail of node session
-GET /nodes/<node>
+GET /nodes/\<node\>
 
 ### Control the node session
-PUT /nodes/<node>?state=on    # console session will connect in the background
+PUT /nodes/\<node\>?state=on    # console session will connect in the background
 
-PUT /nodes/<node>?state=off   # console session will disconnect in the background
+PUT /nodes/\<node\>?state=off   # console session will disconnect in the background
 
 ### Bulk Control
 PUT /bulk/nodes?state=on
@@ -72,7 +72,7 @@ PUT /bulk/nodes?state=on
 ```
 
 ### Delete node session
-DELETE /nodes/<node>
+DELETE /nodes/\<node\>
 
 ### Bulk delete
 DELETE /bulk/nodes

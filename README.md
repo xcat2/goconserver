@@ -7,7 +7,7 @@ the background and help logging the terminal content.
 
 ### Support plugin
 `consoleserver` intent to support multiple types of terminal plugins, currently
-`ssh` is support as OpenBMC use `ssh` as the SOL method and `cmd` is a normal
+`ssh` is support as OpenBMC use `ssh` as the SOL method and `cmd` is a general
 driver to support command session.
 
 ### Structure
@@ -40,7 +40,8 @@ Please refer to [ssl](/scripts/ssl/)
 ## Command Example
 
 ### Start service
-daemon is running in the background.
+daemon is running in the background. To support a large amount of sessions,
+please use `ulimit -n <number>` command to set the number of open files.
 ```
 consoleserver &
 ```
@@ -53,7 +54,7 @@ or with ssh private key
 ```
 congo create testnode driver=ssh ondemand=false --params user=root,host=10.5.102.73,port=22,private_key=<priavte_key_path>
 ```
-or command driver
+or general command driver
 ```
 congo create testnode driver=cmd ondemand=false --params cmd="ssh -l root -p 22 10.5.102.73"
 ```
