@@ -18,31 +18,28 @@ const (
 )
 
 type Console struct {
-	network         *common.Network
-	writeConns      chan net.Conn
-	readConns       chan net.Conn
-	bufConn         map[net.Conn]chan []byte // build the map for the connection and the channel
-	remoteIn        io.Writer
-	remoteOut       io.Reader
-	session         plugins.ConsoleSession // interface for plugin
-	stopWriteTarget chan bool
-	stopReadTarget  chan bool
-	stopWriteClient chan bool
-	node            *Node
+	network   *common.Network
+	bufConn   map[net.Conn]chan []byte // build the map for the connection and the channel
+	remoteIn  io.Writer
+	remoteOut io.Reader
+	session   plugins.ConsoleSession // interface for plugin
+	stop      chan bool
+	node      *Node
 }
 
 func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
-	return &Console{remoteIn: baseSession.In, remoteOut: baseSession.Out,
-		session: baseSession.Session, node: node, network: new(common.Network),
-		writeConns: make(chan net.Conn, 16), readConns: make(chan net.Conn, 16),
-		bufConn: make(map[net.Conn]chan []byte), stopWriteClient: make(chan bool, 1),
-		stopReadTarget: make(chan bool, 1), stopWriteTarget: make(chan bool, 1)}
+	return &Console{remoteIn: baseSession.In,
+		remoteOut: baseSession.Out,
+		session:   baseSession.Session,
+		node:      node,
+		network:   new(common.Network),
+		bufConn:   make(map[net.Conn]chan []byte)}
 }
 
 // Accept connection from client
 func (c *Console) Accept(conn net.Conn) {
-	c.writeConns <- conn
-	c.readConns <- conn
+	go c.writeTarget(conn)
+	go c.writeClient(conn)
 	c.bufConn[conn] = make(chan []byte)
 }
 
@@ -57,7 +54,7 @@ func (c *Console) Disconnect(conn net.Conn) {
 	}
 }
 
-func (c *Console) innerWriteTarget(conn net.Conn) {
+func (c *Console) writeTarget(conn net.Conn) {
 	plog.DebugNode(c.node.Name, "Create new connection to read message from client.")
 	defer c.Disconnect(conn)
 	for {
@@ -92,20 +89,7 @@ func (c *Console) innerWriteTarget(conn net.Conn) {
 	}
 }
 
-func (c *Console) writeTarget() {
-	plog.DebugNode(c.node.Name, "Write target session has been initialized.")
-	for {
-		select {
-		case conn := <-c.writeConns:
-			go c.innerWriteTarget(conn)
-		case <-c.stopWriteTarget:
-			plog.DebugNode(c.node.Name, "Stop write target session.")
-			return
-		}
-	}
-}
-
-func (c *Console) innerWriteClient(conn net.Conn) {
+func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
@@ -123,18 +107,6 @@ func (c *Console) innerWriteClient(conn net.Conn) {
 	}
 }
 
-func (c *Console) writeClient() {
-	for {
-		select {
-		case conn := <-c.readConns:
-			go c.innerWriteClient(conn)
-		case <-c.stopWriteClient:
-			plog.InfoNode(c.node.Name, "Stop writeClient session.")
-			return
-		}
-	}
-}
-
 func (c *Console) readTarget() {
 	plog.DebugNode(c.node.Name, "Read target session has been initialized.")
 	var err error
@@ -142,7 +114,7 @@ func (c *Console) readTarget() {
 	b := make([]byte, 4096)
 	for {
 		select {
-		case <-c.stopReadTarget:
+		case <-c.stop:
 			plog.InfoNode(c.node.Name, "Stop readTarget session.")
 			return
 		default:
@@ -170,9 +142,7 @@ func (c *Console) Start() {
 		c.node.status = STATUS_AVAIABLE
 	}()
 	plog.DebugNode(c.node.Name, "Start console session.")
-	go c.writeTarget()
 	go c.readTarget()
-	go c.writeClient()
 	c.node.ready <- true
 	c.node.status = STATUS_CONNECTED
 	c.session.Wait()
@@ -186,9 +156,7 @@ func (c *Console) Stop() {
 // close session from rest api
 func (c *Console) Close() {
 	plog.DebugNode(c.node.Name, "Close console session.")
-	c.stopReadTarget <- true // 1 buffer size so that Stop call from restapi will not be blocked
-	c.stopWriteTarget <- true
-	c.stopWriteClient <- true
+	c.stop <- true // 1 buffer size, unblock
 	for k := range c.bufConn {
 		k.Close()
 		delete(c.bufConn, k)

@@ -1,7 +1,7 @@
 GITHUB_DIR=${GOPATH}/src/github.com/chenglch/
 REPO_DIR=${GOPATH}/src/github.com/chenglch/consoleserver
 CURRENT_DIR=$(shell pwd)
-REPO_DIR_LINK=$(shell readlink ${REPO_DIR})
+REPO_DIR_LINK=$(shell readlink -f ${REPO_DIR})
 SERVER_CONF_FILE=/etc/consoleserver/server.conf
 CLIENT_CONF_FILE=~/congo.sh
 SERVER_BINARY=consoleserver
