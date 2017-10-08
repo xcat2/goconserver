@@ -34,26 +34,6 @@ func init() {
 	serverConfig = new(ServerConfig)
 }
 
-func InitLogger() {
-
-	if serverConfig == nil {
-		log.SetOutput(os.Stderr)
-		return
-	}
-	logFile := serverConfig.Global.LogFile
-	if logFile == "" {
-		log.SetOutput(os.Stderr)
-		return
-	}
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0666)
-	if err == nil {
-		log.SetOutput(f)
-	} else {
-		log.Info("Failed to log to file, using default stderr")
-		log.SetOutput(os.Stderr)
-	}
-}
-
 func WriteJsonFile(filepath string, data []byte) (err error) {
 	var out bytes.Buffer
 	json.Indent(&out, data, "", "\t")

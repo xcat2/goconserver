@@ -38,9 +38,9 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 
 // Accept connection from client
 func (c *Console) Accept(conn net.Conn) {
+	c.bufConn[conn] = make(chan []byte)
 	go c.writeTarget(conn)
 	go c.writeClient(conn)
-	c.bufConn[conn] = make(chan []byte)
 }
 
 // Disconnect from client

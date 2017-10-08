@@ -9,9 +9,11 @@ import (
 	"github.com/chenglch/consoleserver/plugins"
 	"io/ioutil"
 	"net"
+	"os"
 	"path"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -244,6 +246,7 @@ func (c *ConsoleServer) Listen() {
 		plog.Error(err)
 		return
 	}
+	c.registerSignal()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -252,6 +255,27 @@ func (c *ConsoleServer) Listen() {
 		}
 		go c.handle(conn)
 	}
+}
+
+func (c *ConsoleServer) registerSignal() {
+	exitHandler := func(s os.Signal, arg interface{}) {
+		plog.Info(fmt.Sprintf("Handle signal: %v\n", s))
+		os.Exit(1)
+	}
+	reloadHandler := func(s os.Signal, arg interface{}) {
+		plog.Info(fmt.Sprintf("Handle signal: %v, reload configuration file\n", s))
+		if common.CONF_FILE != "" {
+			common.InitServerConfig(common.CONF_FILE)
+			common.SetLogLevel(serverConfig.Global.LogLevel)
+		}
+	}
+	ignoreHandler := func(s os.Signal, arg interface{}) {}
+	signalSet := common.GetSignalSet()
+	signalSet.Register(syscall.SIGINT, exitHandler)
+	signalSet.Register(syscall.SIGTERM, exitHandler)
+	signalSet.Register(syscall.SIGHUP, reloadHandler)
+	signalSet.Register(syscall.SIGCHLD, ignoreHandler)
+	go common.DoSignal()
 }
 
 type NodeManager struct {

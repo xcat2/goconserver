@@ -5,8 +5,30 @@ import (
 
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"os"
+	"reflect"
 	"runtime"
 	"strings"
+)
+
+const (
+	LOG_DEBUG = "debug"
+	LOG_INFO  = "info"
+	LOG_WARN  = "warn"
+	LOG_ERROR = "error"
+	LOG_FATAL = "fatal"
+	LOG_PANIC = "panic"
+)
+
+var (
+	LOG_LEVEL = map[string]log.Level{
+		LOG_DEBUG: log.DebugLevel,
+		LOG_INFO:  log.InfoLevel,
+		LOG_WARN:  log.WarnLevel,
+		LOG_ERROR: log.ErrorLevel,
+		LOG_FATAL: log.FatalLevel,
+		LOG_PANIC: log.PanicLevel,
+	}
 )
 
 type Logger struct {
@@ -15,8 +37,43 @@ type Logger struct {
 }
 
 func GetLogger(pkg string) *Logger {
-	log.SetLevel(log.DebugLevel)
 	return &Logger{plog: log.WithFields(log.Fields{}), pkg: pkg}
+}
+
+func SetLogLevel(level string) {
+	l := log.InfoLevel
+	if _, ok := LOG_LEVEL[level]; !ok {
+		keys := reflect.ValueOf(LOG_LEVEL).MapKeys()
+		strkeys := make([]string, len(keys))
+		for i := 0; i < len(keys); i++ {
+			strkeys[i] = keys[i].String()
+		}
+		plog.Warn(fmt.Sprintf("Error log level %s received. Only accept %s.", level, strings.Join(strkeys, " ")))
+	} else {
+		l = LOG_LEVEL[level]
+	}
+	log.SetLevel(l)
+}
+
+func InitLogger() {
+	if serverConfig == nil {
+		log.SetOutput(os.Stderr)
+		return
+	}
+	logFile := serverConfig.Global.LogFile
+	logLevel := serverConfig.Global.LogLevel
+	SetLogLevel(logLevel)
+	if logFile == "" {
+		log.SetOutput(os.Stderr)
+		return
+	}
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0666)
+	if err == nil {
+		log.SetOutput(f)
+	} else {
+		log.Info("Failed to log to file, using default stderr")
+		log.SetOutput(os.Stderr)
+	}
 }
 
 func (l *Logger) fileinfo() log.Fields {
@@ -63,6 +120,10 @@ func (l *Logger) InfoNode(node string, message interface{}) {
 
 func (l *Logger) Info(message string) {
 	l.plog.WithFields(l.fileinfo()).Info(message)
+}
+
+func (l *Logger) Warn(message string) {
+	l.plog.WithFields(l.fileinfo()).Warn(message)
 }
 
 func (l *Logger) Error(err interface{}) {

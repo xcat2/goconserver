@@ -23,7 +23,7 @@ driver to support command session.
 ### Requirement
 
 Currently, this tool is in the development stage, there is no binary release.
-Please setup golang SDK and GOPATH environment at first.
+Please setup golang SDK, GOPATH environment and glide at first.
 
 ### Build and installation
 

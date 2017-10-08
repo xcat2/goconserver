@@ -3,11 +3,30 @@ package common
 import (
 	"fmt"
 	"os"
+	"os/signal"
 )
 
 var (
 	signalSet *SignalSet
 )
+
+func DoSignal() {
+	s := GetSignalSet()
+	for {
+		c := make(chan os.Signal)
+		var sigs []os.Signal
+		for sig := range s.GetSigMap() {
+			sigs = append(sigs, sig)
+		}
+		signal.Notify(c)
+		sig := <-c
+		err := s.Handle(sig, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unknown signal received: %v\n", sig)
+			os.Exit(1)
+		}
+	}
+}
 
 type SignalHandler func(s os.Signal, arg interface{})
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"syscall"
 
 	"crypto/tls"
@@ -17,24 +16,6 @@ import (
 	"strings"
 	"time"
 )
-
-func doSignal() {
-	s := common.GetSignalSet()
-	for {
-		c := make(chan os.Signal)
-		var sigs []os.Signal
-		for sig := range s.GetSigMap() {
-			sigs = append(sigs, sig)
-		}
-		signal.Notify(c)
-		sig := <-c
-		err := s.Handle(sig, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "unknown signal received: %v\n", sig)
-			os.Exit(1)
-		}
-	}
-}
 
 type ConsoleClient struct {
 	common.Network
@@ -215,7 +196,7 @@ func (c *ConsoleClient) registerSignal() {
 	signalSet.Register(syscall.SIGHUP, exitHandler)
 	windowSizeHandler := func(s os.Signal, arg interface{}) {}
 	signalSet.Register(syscall.SIGWINCH, windowSizeHandler)
-	go doSignal()
+	go common.DoSignal()
 }
 
 type CongoClient struct {

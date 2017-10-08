@@ -1,9 +1,8 @@
 package common
 
 import (
-	"io/ioutil"
-
 	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"os"
 	"strconv"
 )
@@ -11,6 +10,7 @@ import (
 var (
 	serverConfig *ServerConfig
 	clientConfig *ClientConfig
+	CONF_FILE    string
 )
 
 type ServerConfig struct {
@@ -20,6 +20,7 @@ type ServerConfig struct {
 		SSLCertFile   string `yaml:"ssl_cert_file"`
 		SSLCACertFile string `yaml:"ssl_ca_cert_file"`
 		LogFile       string `yaml:"logfile"`
+		LogLevel      string `yaml:"log_level"` // debug, info, warn, error, fatal, panic
 		Worker        int    `yaml:"worker"`
 	}
 	API struct {
@@ -39,6 +40,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.Host = "0.0.0.0"
 	serverConfig.Global.LogFile = ""
 	serverConfig.Global.Worker = 1
+	serverConfig.Global.LogLevel = "info"
 	serverConfig.API.Port = "8089"
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12430"
@@ -54,6 +56,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	if err != nil {
 		return serverConfig, err
 	}
+	CONF_FILE = confFile
 	return serverConfig, nil
 }
 
