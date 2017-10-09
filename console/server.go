@@ -47,6 +47,7 @@ type Node struct {
 	Ondemand bool              `json:"ondemand, true"`
 	State    string            // string value of status
 	status   int
+	logging  bool // logging state is true only when the console session is started
 	console  *Console
 	ready    chan bool // indicate session has been established with remote
 	rwLock   *sync.RWMutex
@@ -58,6 +59,7 @@ func NewNode() *Node {
 	node.ready = make(chan bool, 0) // block client
 	node.status = STATUS_AVAIABLE
 	node.Ondemand = true
+	node.logging = false
 	node.rwLock = new(sync.RWMutex)
 	node.reserve = common.TYPE_NO_LOCK
 	return node
@@ -90,6 +92,11 @@ func (node *Node) restartConsole() {
 		return
 	}
 	if node.GetStatus() == STATUS_CONNECTED {
+		node.Release(false)
+		return
+	}
+	if node.logging == false && node.status == STATUS_AVAIABLE {
+		// Do not reconnect if stop logging request received from user
 		node.Release(false)
 		return
 	}
@@ -138,6 +145,7 @@ func (node *Node) StopConsole() {
 		plog.WarningNode(node.Name, "Console is not started.")
 		return
 	}
+	node.logging = false
 	node.console.Stop()
 	node.status = STATUS_AVAIABLE
 }
@@ -152,6 +160,10 @@ func (node *Node) GetStatus() int {
 
 func (node *Node) GetReadyChan() chan bool {
 	return node.ready
+}
+
+func (node *Node) SetLoggingState(state bool) {
+	node.logging = state
 }
 
 func (node *Node) RequireLock(share bool) error {

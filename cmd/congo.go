@@ -28,7 +28,7 @@ func version(cmd *cobra.Command, args []string) {
 
 func main() {
 	cmd := &cobra.Command{
-		Use:   "Congo",
+		Use:   "congo",
 		Short: "This is golang client for consoleserver",
 		Long: `Congo --help and congo help COMMAND to see the usage for specfied
 	command.`}

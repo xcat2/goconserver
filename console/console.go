@@ -33,7 +33,8 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 		session:   baseSession.Session,
 		node:      node,
 		network:   new(common.Network),
-		bufConn:   make(map[net.Conn]chan []byte)}
+		bufConn:   make(map[net.Conn]chan []byte),
+		stop:      make(chan bool, 1)}
 }
 
 // Accept connection from client
@@ -144,6 +145,7 @@ func (c *Console) Start() {
 	plog.DebugNode(c.node.Name, "Start console session.")
 	go c.readTarget()
 	c.node.ready <- true
+	c.node.logging = true
 	c.node.status = STATUS_CONNECTED
 	c.session.Wait()
 	c.session.Close()

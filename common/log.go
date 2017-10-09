@@ -67,7 +67,7 @@ func InitLogger() {
 		log.SetOutput(os.Stderr)
 		return
 	}
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0666)
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
 		log.SetOutput(f)
 	} else {

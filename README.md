@@ -16,14 +16,14 @@ driver to support command session.
   the session node.
 
 - client part: `congo`, a command line tool to define session or connect to the
-  session. Multiple client session could be shared.
+  session. Multiple client sessions could be shared.
 
 ## Setup
 
 ### Requirement
 
 Currently, this tool is in the development stage, there is no binary release.
-Please setup golang SDK, GOPATH environment and glide at first.
+Please setup golang SDK, GOPATH environment variable and glide tool at first.
 
 ### Build and installation
 

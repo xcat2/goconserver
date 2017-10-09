@@ -101,7 +101,7 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 
 func (c *CongoCli) showCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "show",
+		Use:   "show <node>",
 		Short: "show node detail in consoleserver service",
 		Long:  `show node detail in consoleserver service. congo show <node>`,
 		Run:   c.show,
@@ -125,7 +125,7 @@ func (c *CongoCli) show(cmd *cobra.Command, args []string) {
 
 func (c *CongoCli) loggingCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "logging",
+		Use:   "logging <node> on/off",
 		Short: "Start or stop logging for request node",
 		Long: `Turn on or turn off the console session in the background. If on, the
 		        console log will be kept. congo logging <node> on/off`,
@@ -153,7 +153,7 @@ func (c *CongoCli) logging(cmd *cobra.Command, args []string) {
 
 func (c *CongoCli) deleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete",
+		Use:   "delete <node>",
 		Short: "delete node in console server",
 		Long:  `delete node in console server. congo delete <node>`,
 		Run:   c.delete,
@@ -176,7 +176,7 @@ func (c *CongoCli) delete(cmd *cobra.Command, args []string) {
 
 func (c *CongoCli) createCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "create",
+		Use:   "create <node>",
 		Short: "create node in console server",
 		Long:  `create node in console server. congo create <node> driver=ssh ondemand=true params=`,
 		Run:   c.create,
@@ -212,7 +212,7 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 
 func (c *CongoCli) consoleCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "console",
+		Use:   "console <node>",
 		Short: "connect to the console server as the console client",
 		Long: `connect to the console server as the console client. congo console <node>.
 		        The console connection will not be shutdown until enter the sequence keys 'ctrl+e+c+.'`,
