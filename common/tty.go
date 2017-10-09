@@ -1,57 +1,58 @@
 package common
 
 import (
-	"errors"
 	"os"
-	"os/exec"
-	"strconv"
-	"strings"
+	"syscall"
+	"unsafe"
 )
 
 type Tty struct{}
 
-func (*Tty) size() (int, int, error) {
-	cmd := exec.Command("stty", "size")
-	cmd.Stdin = os.Stdin
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, 0, err
-	}
-	parts := strings.Split(string(out), " ")
-	if len(parts) != 2 {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported")
-	}
-	x, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported")
-	}
-	y, err := strconv.Atoi(strings.Replace(parts[1], "\n", "", 1))
-	if err != nil {
-		return 0, 0, errors.New("The output of 'stty size' command is not supported")
-	}
-	return int(x), int(y), err
+type winsize struct {
+	ws_row    uint16
+	ws_col    uint16
+	ws_xpixel uint16
+	ws_ypixel uint16
 }
 
-func (t *Tty) Width() (int, error) {
-	width, _, err := t.size()
-	if err != nil {
-		return 0, err
+func (t *Tty) getWinSize(ws *winsize, fd uintptr) error {
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		fd,
+		syscall.TIOCGWINSZ,
+		uintptr(unsafe.Pointer(ws)),
+	)
+	if errno != 0 {
+		return syscall.Errno(errno)
 	}
-	return width, err
+	return nil
 }
 
-// Height returns the height of the terminal.
-func (t *Tty) Height() (int, error) {
-	_, height, err := t.size()
-	if err != nil {
-		return 0, err
+func (t *Tty) setWinsize(fd uintptr, ws *winsize) error {
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		fd,
+		uintptr(syscall.TIOCSWINSZ),
+		uintptr(unsafe.Pointer(ws)))
+	if errno != 0 {
+		return syscall.Errno(errno)
 	}
-	return height, err
+	return nil
 }
 
-func (t *Tty) SetSize(width, height int) error {
-	cmd := exec.Command("stty", "rows", strconv.Itoa(height), "cols", strconv.Itoa(width))
-	cmd.Stdin = os.Stdin
-	_, err := cmd.Output()
-	return err
+func (t *Tty) GetSize(f *os.File) (rows, cols int, err error) {
+	if f == nil {
+		f = os.Stdin
+	}
+	var ws winsize
+	err = t.getWinSize(&ws, f.Fd())
+	return int(ws.ws_row), int(ws.ws_col), err
+}
+
+func (t *Tty) SetSize(f *os.File, width, height int) error {
+	if f == nil {
+		f = os.Stdin
+	}
+	ws := winsize{ws_row: uint16(width), ws_col: uint16(height), ws_xpixel: 0, ws_ypixel: 0}
+	return t.setWinsize(f.Fd(), &ws)
 }

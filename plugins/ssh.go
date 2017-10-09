@@ -10,6 +10,7 @@ import (
 
 	"github.com/chenglch/consoleserver/common"
 	"golang.org/x/crypto/ssh"
+	"os"
 )
 
 type SSHConsole struct {
@@ -111,13 +112,11 @@ func (s *SSHConsole) connectToHost() error {
 
 func (s *SSHConsole) startConsole() (*BaseSession, error) {
 	tty := common.Tty{}
-	ttyWidth, err := tty.Width()
+	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		return nil, err
-	}
-	ttyHeight, err := tty.Height()
-	if err != nil {
-		return nil, err
+		plog.WarningNode(s.node, "Could not get tty size, use 80,80 as default")
+		ttyHeight = 80
+		ttyWidth = 80
 	}
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          1,     // Disable echoing

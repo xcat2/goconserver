@@ -275,6 +275,7 @@ func (c *ConsoleServer) registerSignal() {
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, reloadHandler)
 	signalSet.Register(syscall.SIGCHLD, ignoreHandler)
+	signalSet.Register(syscall.SIGWINCH, ignoreHandler)
 	go common.DoSignal()
 }
 
