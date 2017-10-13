@@ -73,7 +73,7 @@ func (node *Node) Init() {
 }
 
 func (node *Node) Validate() error {
-	if _, ok := plugins.SUPPORTED_DRIVERS[node.Driver]; !ok {
+	if _, ok := plugins.DRIVER_VALIDATE_MAP[node.Driver]; !ok {
 		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.Driver))
 	}
 	if err := plugins.Validate(node.Driver, node.Name, node.Params); err != nil {

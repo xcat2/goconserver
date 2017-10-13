@@ -1,11 +1,17 @@
 package plugins
 
 import (
+	"errors"
+	"fmt"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/kr/pty"
 	"os"
 	"os/exec"
 	"strings"
+)
+
+const (
+	DRIVER_CMD = "cmd"
 )
 
 type CommondConsole struct {
@@ -15,10 +21,20 @@ type CommondConsole struct {
 	command *exec.Cmd
 }
 
-func NewCommondConsole(node string, params map[string]string) *CommondConsole {
+func init() {
+	DRIVER_INIT_MAP[DRIVER_CMD] = NewCommondConsole
+	DRIVER_VALIDATE_MAP[DRIVER_CMD] = func(name string, params map[string]string) error {
+		if _, ok := params["cmd"]; !ok {
+			return errors.New(fmt.Sprintf("node %s: Please specify the command", name))
+		}
+		return nil
+	}
+}
+
+func NewCommondConsole(node string, params map[string]string) (ConsolePlugin, error) {
 	cmd := params["cmd"]
 	args := strings.Split(cmd, " ")
-	return &CommondConsole{node: node, cmd: args[0], params: args[1:]}
+	return &CommondConsole{node: node, cmd: args[0], params: args[1:]}, nil
 }
 
 func (c *CommondConsole) Start() (*BaseSession, error) {

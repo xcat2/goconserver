@@ -1,17 +1,38 @@
 package plugins
 
 import (
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"time"
-
-	"errors"
-	"fmt"
 
 	"github.com/chenglch/consoleserver/common"
 	"golang.org/x/crypto/ssh"
 	"os"
 )
+
+const (
+	DRIVER_SSH = "ssh"
+)
+
+func init() {
+	DRIVER_INIT_MAP[DRIVER_SSH] = NewSSHConsole
+	DRIVER_VALIDATE_MAP[DRIVER_SSH] = func(name string, params map[string]string) error {
+		if _, ok := params["host"]; !ok {
+			return errors.New(fmt.Sprintf("node %s: Parameter host is not defined", name))
+		}
+		if _, ok := params["user"]; !ok {
+			return errors.New(fmt.Sprintf("node %s: Parameter user is not defined", name))
+		}
+		_, ok1 := params["password"]
+		_, ok2 := params["private_key"]
+		if !ok1 && !ok2 {
+			return errors.New(fmt.Sprintf("node %s: At least one of the parameter within private_key and password should be specified", name))
+		}
+		return nil
+	}
+}
 
 type SSHConsole struct {
 	node           string // session name
@@ -23,7 +44,7 @@ type SSHConsole struct {
 	session        *ssh.Session
 }
 
-func NewSSHConsole(node string, params map[string]string) (*SSHConsole, error) {
+func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error) {
 	var password, privateKey, port string
 	if _, ok := params["host"]; !ok {
 		plog.ErrorNode(node, "host parameter is not defined")
