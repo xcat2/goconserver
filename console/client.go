@@ -174,8 +174,12 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 		os.Exit(1)
 	}
 	if clientConfig.SSLCertFile != "" && clientConfig.SSLKeyFile != "" && clientConfig.SSLCACertFile != "" {
-		conn = tls.Client(conn, common.LoadClientTlsConfig(clientConfig.SSLCertFile, clientConfig.SSLKeyFile,
-			clientConfig.SSLCACertFile, clientConfig.ServerHost))
+		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile, clientConfig.SSLKeyFile,
+			clientConfig.SSLCACertFile, clientConfig.ServerHost)
+		if err != nil {
+			panic(err)
+		}
+		conn = tls.Client(conn, tlsConfig)
 		err = conn.(*tls.Conn).Handshake()
 		if err != nil {
 			return nil, err
@@ -210,8 +214,12 @@ func NewCongoClient(baseUrl string) *CongoClient {
 	client := &common.HttpClient{Client: http.DefaultClient, Headers: http.Header{}}
 	if strings.HasPrefix(baseUrl, "https") && clientConfig.SSLKeyFile != "" &&
 		clientConfig.SSLCertFile != "" && clientConfig.SSLCACertFile != "" {
-		client.Client.Transport = &http.Transport{TLSClientConfig: common.LoadClientTlsConfig(clientConfig.SSLCertFile,
-			clientConfig.SSLKeyFile, clientConfig.SSLCACertFile, clientConfig.ServerHost)}
+		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile,
+			clientConfig.SSLKeyFile, clientConfig.SSLCACertFile, clientConfig.ServerHost)
+		if err != nil {
+			panic(err)
+		}
+		client.Client.Transport = &http.Transport{TLSClientConfig: tlsConfig}
 	}
 	return &CongoClient{client: client, baseUrl: baseUrl}
 }

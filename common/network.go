@@ -123,35 +123,35 @@ func (s *Network) SendByteWithLengthTimeout(conn net.Conn, b []byte, timeout tim
 	return s.ResetWriteTimeout(conn)
 }
 
-func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string) *tls.Config {
+func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pool := x509.NewCertPool()
 	caCert, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pool.AppendCertsFromPEM(caCert)
 	tlsConfig := tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, ServerName: serverHost}
 	tlsConfig.BuildNameToCertificate()
-	return &tlsConfig
+	return &tlsConfig, nil
 }
 
-func LoadServerTlsConfig(certPath string, keyPath string, caCertPath string) *tls.Config {
+func LoadServerTlsConfig(certPath string, keyPath string, caCertPath string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pool := x509.NewCertPool()
 	caCert, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pool.AppendCertsFromPEM(caCert)
 	tlsConfig := tls.Config{ClientCAs: pool, Certificates: []tls.Certificate{cert},
 		ClientAuth: tls.RequireAnyClientCert}
 	tlsConfig.Rand = rand.Reader
-	return &tlsConfig
+	return &tlsConfig, nil
 }

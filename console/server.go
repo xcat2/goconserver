@@ -248,8 +248,12 @@ func (c *ConsoleServer) Listen() {
 	var listener net.Listener
 	var err error
 	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
-		tlsConfig := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
+		tlsConfig, err := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
 			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile)
+		if err != nil {
+			plog.Error(err)
+			panic(err)
+		}
 		listener, err = tls.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port), tlsConfig)
 	} else {
 		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
