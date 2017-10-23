@@ -22,6 +22,7 @@ type ServerConfig struct {
 		LogFile       string `yaml:"logfile"`
 		LogLevel      string `yaml:"log_level"` // debug, info, warn, error, fatal, panic
 		Worker        int    `yaml:"worker"`
+		StorageType   string `yaml:"storage_type"`
 	}
 	API struct {
 		Port        string `yaml:"port"`
@@ -34,6 +35,11 @@ type ServerConfig struct {
 		ClientTimeout int    `yaml:"client_timeout"`
 		TargetTimeout int    `yaml:"target_timeout"`
 	}
+	Etcd struct {
+		DailTimeout    int    `yaml:"dail_timeout"`
+		RequestTimeout int    `yaml:"request_timeout"`
+		Endpoints      string `yaml:endpoints`
+	}
 }
 
 func InitServerConfig(confFile string) (*ServerConfig, error) {
@@ -41,6 +47,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.LogFile = ""
 	serverConfig.Global.Worker = 1
 	serverConfig.Global.LogLevel = "info"
+	serverConfig.Global.StorageType = "file"
 	serverConfig.API.Port = "8089"
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12430"
@@ -48,6 +55,9 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
+	serverConfig.Etcd.DailTimeout = 5
+	serverConfig.Etcd.RequestTimeout = 2
+	serverConfig.Etcd.Endpoints = "127.0.0.1:2379"
 	data, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		return serverConfig, nil

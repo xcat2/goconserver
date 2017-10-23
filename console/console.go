@@ -14,7 +14,6 @@ import (
 
 const (
 	ExitSequence = "\x05c." // ctrl-e, c
-	MaxUint32    = 1<<32 - 1
 )
 
 type Console struct {
@@ -49,39 +48,39 @@ func (c *Console) Disconnect(conn net.Conn) {
 	conn.Close()
 	delete(c.bufConn, conn)
 	// all of the client has been disconnected
-	if len(c.bufConn) == 0 && c.node.Ondemand == true {
+	if len(c.bufConn) == 0 && c.node.StorageNode.Ondemand == true {
 		c.Close()
 		c.node.status = STATUS_AVAIABLE
 	}
 }
 
 func (c *Console) writeTarget(conn net.Conn) {
-	plog.DebugNode(c.node.Name, "Create new connection to read message from client.")
+	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to read message from client.")
 	defer c.Disconnect(conn)
 	for {
 		if _, ok := c.bufConn[conn]; !ok {
-			plog.ErrorNode(c.node.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
+			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
 		n, err := c.network.ReceiveInt(conn)
 		if err != nil {
-			plog.WarningNode(c.node.Name, fmt.Sprintf("Failed to receive message head from client. Error:%s.", err.Error()))
+			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message head from client. Error:%s.", err.Error()))
 			return
 		}
 		b, err := c.network.ReceiveBytes(conn, n)
 		if err != nil {
-			plog.WarningNode(c.node.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
+			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
 			return
 		}
 		if string(b) == ExitSequence {
-			plog.InfoNode(c.node.Name, "Received exit signal from client")
+			plog.InfoNode(c.node.StorageNode.Name, "Received exit signal from client")
 			return
 		}
 		tmp := 0
 		for n > 0 {
 			count, err := c.remoteIn.Write(b[tmp:])
 			if err != nil {
-				plog.WarningNode(c.node.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
+				plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
 				return
 			}
 			tmp += count
@@ -91,43 +90,43 @@ func (c *Console) writeTarget(conn net.Conn) {
 }
 
 func (c *Console) writeClient(conn net.Conn) {
-	plog.DebugNode(c.node.Name, "Create new connection to write message to client.")
+	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	for {
 		if _, ok := c.bufConn[conn]; !ok {
-			plog.ErrorNode(c.node.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
+			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
 		b := <-c.bufConn[conn]
 		err := c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
-			plog.WarningNode(c.node.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
 		}
 	}
 }
 
 func (c *Console) readTarget() {
-	plog.DebugNode(c.node.Name, "Read target session has been initialized.")
+	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	var err error
 	var n int
 	b := make([]byte, 4096)
 	for {
 		select {
 		case <-c.stop:
-			plog.InfoNode(c.node.Name, "Stop readTarget session.")
+			plog.InfoNode(c.node.StorageNode.Name, "Stop readTarget session.")
 			return
 		default:
 		}
 		n, err = c.remoteOut.Read(b)
 		if err != nil {
-			plog.WarningNode(c.node.Name, fmt.Sprintf("Could not receive message from remote. Error:", err.Error()))
+			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Could not receive message from remote. Error:", err.Error()))
 			return
 		}
 		if n > 0 {
 			c.writeClientChan(b[:n])
-			c.logger(fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.Name), b[:n])
+			c.logger(fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name), b[:n])
 		}
 	}
 }
@@ -142,7 +141,7 @@ func (c *Console) Start() {
 	defer func() {
 		c.node.status = STATUS_AVAIABLE
 	}()
-	plog.DebugNode(c.node.Name, "Start console session.")
+	plog.DebugNode(c.node.StorageNode.Name, "Start console session.")
 	go c.readTarget()
 	c.node.ready <- true
 	c.node.logging = true
@@ -157,7 +156,7 @@ func (c *Console) Stop() {
 
 // close session from rest api
 func (c *Console) Close() {
-	plog.DebugNode(c.node.Name, "Close console session.")
+	plog.DebugNode(c.node.StorageNode.Name, "Close console session.")
 	c.stop <- true // 1 buffer size, unblock
 	for k := range c.bufConn {
 		k.Close()
@@ -172,7 +171,7 @@ func (c *Console) logger(path string, b []byte) error {
 		var err error
 		fd, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
-			plog.ErrorNode(c.node.Name, err)
+			plog.ErrorNode(c.node.StorageNode.Name, err)
 			return err
 		}
 		defer fd.Close()
@@ -180,7 +179,7 @@ func (c *Console) logger(path string, b []byte) error {
 		for l > 0 {
 			n, err := fd.Write(b)
 			if err != nil {
-				plog.ErrorNode(c.node.Name, err)
+				plog.ErrorNode(c.node.StorageNode.Name, err)
 				return err
 			}
 			l -= n

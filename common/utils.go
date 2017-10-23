@@ -21,7 +21,12 @@ const (
 	TYPE_SHARE_LOCK
 	TYPE_EXCLUDE_LOCK
 
-	SLEEP_TICK = 100 // millisecond
+	SLEEP_TICK    = 100 // millisecond
+	ACTION_DELETE = 1
+	ACTION_PUT    = 0
+	ACTION_NIL    = -1
+
+	Maxint32 = 1<<31 - 1
 )
 
 var (
@@ -200,4 +205,11 @@ func Wait(c chan bool, addr *uint32, val uint32, fc interface{}) {
 			fc.(func())()
 		}
 	}
+}
+
+func If(condition bool, trueVal, falseVal interface{}) interface{} {
+	if condition {
+		return trueVal
+	}
+	return falseVal
 }

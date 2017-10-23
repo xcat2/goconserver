@@ -1,5 +1,5 @@
+#!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-# !/usr/bin/python
 from __future__ import print_function
 import os
 import sys
@@ -153,6 +153,8 @@ if __name__ == "__main__":
             api.test_bulk_post()
         elif method == 'bulk_delete':
             api.test_bulk_delete()
+        else:
+            print("Unsupport sub command %s." % method)
     else:
         count = 1000
         api = APItest(count)

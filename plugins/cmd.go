@@ -58,7 +58,6 @@ func (c *CommondConsole) Start() (*BaseSession, error) {
 
 func (c *CommondConsole) Close() error {
 	return c.command.Process.Kill()
-
 }
 
 func (c *CommondConsole) Wait() error {

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/chenglch/consoleserver/plugins"
-	"io/ioutil"
+	"github.com/chenglch/consoleserver/storage"
 	"net"
+	"net/http"
 	"os"
-	"path"
 	"runtime"
 	"sync"
 	"syscall"
@@ -23,16 +23,16 @@ const (
 	STATUS_CONNECTED
 	STATUS_ERROR
 
+	CONSOLE_ON            = "on"
+	CONSOLE_OFF           = "off"
 	COMMAND_START_CONSOLE = "start_console"
 )
 
 var (
-	plog           = common.GetLogger("github.com/chenglch/consoleserver/service")
-	nodeManager    *NodeManager
-	serverConfig   = common.GetServerConfig()
-	nodeConfigFile string
-	nodeBackupFile string
-	STATUS_MAP     = map[int]string{
+	plog         = common.GetLogger("github.com/chenglch/consoleserver/service")
+	nodeManager  *NodeManager
+	serverConfig = common.GetServerConfig()
+	STATUS_MAP   = map[int]string{
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
 		STATUS_CONNECTED: "connected",
@@ -41,24 +41,21 @@ var (
 )
 
 type Node struct {
-	Name     string            `json:"name"`
-	Driver   string            `json:"driver"` // node type cmd, ssh, ipmitool
-	Params   map[string]string `json:"params"`
-	Ondemand bool              `json:"ondemand, true"`
-	State    string            // string value of status
-	status   int
-	logging  bool // logging state is true only when the console session is started
-	console  *Console
-	ready    chan bool // indicate session has been established with remote
-	rwLock   *sync.RWMutex
-	reserve  int
+	StorageNode *storage.Node
+	State       string // string value of status
+	status      int
+	logging     bool // logging state is true only when the console session is started
+	console     *Console
+	ready       chan bool // indicate session has been established with remote
+	rwLock      *sync.RWMutex
+	reserve     int
 }
 
-func NewNode() *Node {
+func NewNode(storNode *storage.Node) *Node {
 	node := new(Node)
 	node.ready = make(chan bool, 0) // block client
 	node.status = STATUS_AVAIABLE
-	node.Ondemand = true
+	node.StorageNode = storNode
 	node.logging = false
 	node.rwLock = new(sync.RWMutex)
 	node.reserve = common.TYPE_NO_LOCK
@@ -73,22 +70,22 @@ func (node *Node) Init() {
 }
 
 func (node *Node) Validate() error {
-	if _, ok := plugins.DRIVER_VALIDATE_MAP[node.Driver]; !ok {
-		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.Driver))
+	if _, ok := plugins.DRIVER_VALIDATE_MAP[node.StorageNode.Driver]; !ok {
+		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.StorageNode.Driver))
 	}
-	if err := plugins.Validate(node.Driver, node.Name, node.Params); err != nil {
+	if err := plugins.Validate(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (node *Node) restartConsole() {
-	if _, ok := nodeManager.Nodes[node.Name]; !ok {
-		plog.WarningNode(node.Name, "node has alrealy been removed.")
+	if _, ok := nodeManager.Nodes[node.StorageNode.Name]; !ok {
+		plog.WarningNode(node.StorageNode.Name, "node has alrealy been removed.")
 		return
 	}
 	if err := node.RequireLock(false); err != nil {
-		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
 		return
 	}
 	if node.GetStatus() == STATUS_CONNECTED {
@@ -100,23 +97,23 @@ func (node *Node) restartConsole() {
 		node.Release(false)
 		return
 	}
-	go node.StartConsole()
+	go node.startConsole()
 	if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
-		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 		node.Release(false)
 		return
 	}
 }
 
-func (node *Node) StartConsole() {
+func (node *Node) startConsole() {
 	var consolePlugin plugins.ConsolePlugin
 	var err error
 	var baseSession *plugins.BaseSession
-	consolePlugin, err = plugins.StartConsole(node.Driver, node.Name, node.Params)
+	consolePlugin, err = plugins.StartConsole(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params)
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
 		time.Sleep(time.Duration(5) * time.Second)
 		go node.restartConsole()
 		return
@@ -125,7 +122,7 @@ func (node *Node) StartConsole() {
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
 		time.Sleep(time.Duration(5) * time.Second)
 		go node.restartConsole()
 		return
@@ -133,21 +130,53 @@ func (node *Node) StartConsole() {
 	console := NewConsole(baseSession, node)
 	node.console = console
 	console.Start()
-	if node.Ondemand == false {
-		plog.InfoNode(node.Name, "Start console again due to the ondemand setting.")
+	if node.StorageNode.Ondemand == false {
+		plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
 		time.Sleep(time.Duration(5) * time.Second)
 		node.restartConsole()
 	}
 }
 
-func (node *Node) StopConsole() {
+// has lock
+func (node *Node) StartConsole() {
+	if err := node.RequireLock(false); err != nil {
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+		return
+	}
+	if node.GetStatus() == STATUS_CONNECTED {
+		node.Release(false)
+		return
+	}
+	go node.startConsole()
+	// open a new groutine to make the rest request asynchronous
+	go func() {
+		if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+			plog.ErrorNode(node.StorageNode.Name, err)
+		}
+		node.Release(false)
+	}()
+}
+
+func (node *Node) stopConsole() {
 	if node.console == nil {
-		plog.WarningNode(node.Name, "Console is not started.")
+		plog.WarningNode(node.StorageNode.Name, "Console is not started.")
 		return
 	}
 	node.logging = false
 	node.console.Stop()
 	node.status = STATUS_AVAIABLE
+}
+
+// has lock
+func (node *Node) StopConsole() {
+	if err := node.RequireLock(false); err != nil {
+		nodeManager.RWlock.Unlock()
+		return
+	}
+	if node.GetStatus() == STATUS_CONNECTED {
+		node.stopConsole()
+	}
+	node.Release(false)
 }
 
 func (node *Node) SetStatus(status int) {
@@ -214,7 +243,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 	if data["command"] == COMMAND_START_CONSOLE {
 		if node.status != STATUS_CONNECTED {
 			if err := node.RequireLock(false); err != nil {
-				plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
+				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 				c.SendInt(conn.(net.Conn), STATUS_ERROR)
 				conn.(net.Conn).Close()
 				return
@@ -222,9 +251,9 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			if node.status == STATUS_CONNECTED {
 				node.Release(false)
 			} else {
-				go node.StartConsole()
+				go node.startConsole()
 				if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
-					plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s.", err))
+					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 					node.Release(false)
 					c.SendInt(conn.(net.Conn), STATUS_ERROR)
 					conn.(net.Conn).Close()
@@ -233,7 +262,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			}
 		}
 		if node.status == STATUS_CONNECTED {
-			plog.InfoNode(node.Name, "Register client connection successfully.")
+			plog.InfoNode(node.StorageNode.Name, "Register client connection successfully.")
 			// reply success message to the client
 			c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
 			node.console.Accept(conn.(net.Conn))
@@ -296,48 +325,75 @@ func (c *ConsoleServer) registerSignal() {
 }
 
 type NodeManager struct {
-	Nodes       map[string]*Node
-	RWlock      *sync.RWMutex
-	persistence uint32 // 0 no pending data, 1 has pending data
-	pending     chan bool
+	Nodes  map[string]*Node
+	RWlock *sync.RWMutex
+	stor   storage.StorInterface
 }
 
 func GetNodeManager() *NodeManager {
 	if nodeManager == nil {
 		nodeManager = new(NodeManager)
 		nodeManager.Nodes = make(map[string]*Node)
-		nodeManager.persistence = 0
-		nodeManager.pending = make(chan bool, 1) // make it non-block
 		nodeManager.RWlock = new(sync.RWMutex)
 		consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
-		nodeManager.importNodes()
+		stor, err := storage.NewStorage(serverConfig.Global.StorageType)
+		if err != nil {
+			panic(err)
+		}
+		nodeManager.stor = stor
+		nodeManager.stor.ImportNodes()
+		nodeManager.fromStorNodes()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
 		nodeManager.initNodes()
-		go nodeManager.doPersist()
+		go nodeManager.PersistWatcher()
 		go consoleServer.Listen()
 	}
 	return nodeManager
+}
+
+func (m *NodeManager) fromStorNodes() {
+	m.RWlock.Lock()
+	for k, v := range m.stor.GetNodes() {
+		var node *Node
+		if _, ok := m.Nodes[k]; !ok {
+			node = NewNode(v)
+		} else {
+			node.StorageNode = v
+		}
+		m.Nodes[k] = node
+	}
+	m.RWlock.Unlock()
+}
+
+func (m *NodeManager) toStorNodes() map[string]*storage.Node {
+	storNodes := make(map[string]*storage.Node)
+	m.RWlock.RLock()
+	for k, v := range m.Nodes {
+		storNodes[k] = v.StorageNode
+	}
+	m.RWlock.RUnlock()
+	return storNodes
 }
 
 func (m *NodeManager) initNodes() {
 	for _, v := range nodeManager.Nodes {
 		node := v
 		node.Init()
-		if node.Ondemand == false {
+		if node.StorageNode.Ondemand == false {
 			go func() {
 				if err := node.RequireLock(false); err != nil {
-					plog.WarningNode(node.Name, "Conflict while starting console.")
+					plog.WarningNode(node.StorageNode.Name, "Conflict while starting console.")
 					return
 				}
 				if node.status == STATUS_CONNECTED {
-					plog.WarningNode(node.Name, "Console has already been started.")
+					plog.WarningNode(node.StorageNode.Name, "Console has already been started.")
 					node.Release(false)
 					return
 				}
-				go node.StartConsole()
+				go node.startConsole()
 				if err := common.TimeoutChan(node.GetReadyChan(),
 					serverConfig.Console.TargetTimeout); err != nil {
-					plog.ErrorNode(node.Name, err)
+					plog.ErrorNode(node.StorageNode.Name, err)
 				}
 				node.Release(false)
 			}()
@@ -345,92 +401,256 @@ func (m *NodeManager) initNodes() {
 	}
 }
 
-func (m *NodeManager) Save() {
-	var data []byte
-	var err error
-	m.RWlock.Lock()
-	if data, err = json.Marshal(m.Nodes); err != nil {
-		m.RWlock.Unlock()
-		plog.Error(fmt.Sprintf("Could not Marshal the node map: %s.", err))
-		panic(err)
+func (m *NodeManager) ListNode() map[string][]string {
+	nodes := make(map[string][]string)
+	nodes["nodes"] = make([]string, 0)
+	for _, node := range nodeManager.Nodes {
+		nodes["nodes"] = append(nodes["nodes"], node.StorageNode.Name)
 	}
-	m.RWlock.Unlock()
-	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
-	nodeBackupFile = path.Join(serverConfig.Console.DataDir, "nodes.json.bak")
-	if ok, _ := common.PathExists(nodeConfigFile); ok {
-		_, err = common.CopyFile(nodeBackupFile, nodeConfigFile)
-		if err != nil {
-			plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
-			panic(err)
-		}
-	}
-	err = common.WriteJsonFile(nodeConfigFile, data)
-	if err != nil {
-		plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
-		panic(err)
-	}
-	go func() {
-		_, err = common.CopyFile(nodeBackupFile, nodeConfigFile)
-		if err != nil {
-			plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
-		}
-	}()
+	return nodes
 }
 
-func (m *NodeManager) importNodes() {
-	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
-	useBackup := false
-	if ok, _ := common.PathExists(nodeConfigFile); ok {
-		bytes, err := ioutil.ReadFile(nodeConfigFile)
-		if err != nil {
-			plog.Error(fmt.Sprintf("Could not read node configration file %s.", nodeConfigFile))
-			useBackup = true
+func (m *NodeManager) ShowNode(name string) (*Node, int, error) {
+	var err error
+	if !nodeManager.Exists(name) {
+		err = errors.New(fmt.Sprintf("The node %s is not exist.", name))
+		return nil, http.StatusBadRequest, err
+	}
+	node := nodeManager.Nodes[name]
+	if err := node.RequireLock(true); err != nil {
+		return nil, http.StatusConflict, err
+	}
+	node.State = STATUS_MAP[node.GetStatus()]
+	node.Release(true)
+	return node, http.StatusOK, nil
+}
+
+func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
+	result := make(map[string]string)
+	for _, v := range nodes {
+		if v == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
 		}
-		if err := json.Unmarshal(bytes, &nodeManager.Nodes); err != nil {
-			plog.Error(fmt.Sprintf("Could not parse node configration file %s.", nodeConfigFile))
-			useBackup = true
+		m.RWlock.Lock()
+		if !m.Exists(v) {
+			msg := "Skip this node as node is not exist."
+			plog.ErrorNode(v, msg)
+			result[v] = msg
+			m.RWlock.Unlock()
+			continue
+		}
+		node := m.Nodes[v]
+		m.RWlock.Unlock()
+		if state == CONSOLE_ON && node.GetStatus() != STATUS_CONNECTED {
+			node.StartConsole()
+		} else if state == CONSOLE_OFF && node.GetStatus() == STATUS_CONNECTED {
+			node.StopConsole()
+		}
+		result[v] = "Updated"
+	}
+	return result
+}
+
+func (m *NodeManager) PostNode(storNode *storage.Node) (int, error) {
+	if !m.stor.IsAsync() {
+		node := NewNode(storNode)
+		if err := node.Validate(); err != nil {
+			return http.StatusBadRequest, err
+		}
+		m.RWlock.Lock()
+		if m.Exists(node.StorageNode.Name) {
+			err := errors.New(fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name))
+			m.RWlock.Unlock()
+			return http.StatusAlreadyReported, err
+		}
+		node.SetStatus(STATUS_ENROLL)
+		m.Nodes[node.StorageNode.Name] = node
+		m.RWlock.Unlock()
+		m.NotifyPersist(nil, common.ACTION_NIL)
+		plog.InfoNode(node.StorageNode.Name, "Created.")
+		if node.StorageNode.Ondemand == false {
+			node.StartConsole()
 		}
 	} else {
-		useBackup = true
+		storNodes := make(map[string][]storage.Node)
+		storNodes["nodes"] = make([]storage.Node, 0)
+		storNodes["nodes"] = append(storNodes["nodes"], *storNode)
+		m.NotifyPersist(storNodes, common.ACTION_PUT)
 	}
-	if !useBackup {
+	return http.StatusAccepted, nil
+}
+
+func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]string) {
+	for _, v := range storNodes {
+		// the silce pointer will be changed with the for loop, create a new variable.
+		if v.Name == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
+		}
+		if v.Driver == "" {
+			msg := "Driver is not defined."
+			plog.ErrorNode(v.Name, msg)
+			if result != nil {
+				result[v.Name] = msg
+			}
+			continue
+		}
+		temp := v // the slice in go is a little tricky, use temporary variable to store the value
+		node := NewNode(&temp)
+		if err := node.Validate(); err != nil {
+			msg := "Failed to validate the node property."
+			plog.ErrorNode(node.StorageNode.Name, msg)
+			if result != nil {
+				result[node.StorageNode.Name] = msg
+			}
+
+			continue
+		}
+		m.RWlock.Lock()
+		if m.Exists(node.StorageNode.Name) {
+			msg := "Skip this node as node is exist."
+			plog.ErrorNode(node.StorageNode.Name, msg)
+			if result != nil {
+				result[node.StorageNode.Name] = msg
+			}
+			m.RWlock.Unlock()
+			continue
+		}
+		node.SetStatus(STATUS_ENROLL)
+		m.Nodes[node.StorageNode.Name] = node
+		m.RWlock.Unlock()
+		if result != nil {
+			result[node.StorageNode.Name] = "Created"
+		}
+		if node.StorageNode.Ondemand == false {
+			node.StartConsole()
+		}
+	}
+}
+
+func (m *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]string {
+	result := make(map[string]string)
+	if !m.stor.IsAsync() {
+		m.postNodes(storNodes["nodes"], result)
+		m.NotifyPersist(nil, common.ACTION_NIL)
+	} else {
+		for _, v := range storNodes["nodes"] {
+			result[v.Name] = "Accept"
+		}
+		m.NotifyPersist(storNodes, common.ACTION_PUT)
+	}
+	return result
+}
+
+func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
+	if !m.stor.IsAsync() {
+		nodeManager.RWlock.Lock()
+		if !nodeManager.Exists(nodeName) {
+			nodeManager.RWlock.Unlock()
+			return http.StatusBadRequest, errors.New(fmt.Sprintf("Node %s is not exist", nodeName))
+		}
+		node := nodeManager.Nodes[nodeName]
+		if node.GetStatus() == STATUS_CONNECTED {
+			go node.StopConsole()
+		}
+		delete(nodeManager.Nodes, nodeName)
+		nodeManager.RWlock.Unlock()
+		nodeManager.NotifyPersist(nil, common.ACTION_NIL)
+	} else {
+		names := make([]string, 0)
+		names = append(names, nodeName)
+		m.NotifyPersist(names, common.ACTION_DELETE)
+	}
+	return http.StatusAccepted, nil
+}
+
+func (m *NodeManager) deleteNodes(names []string, result map[string]string) {
+	for _, v := range names {
+		if v == "" {
+			plog.Error("Skip this record as node name is not defined.")
+			continue
+		}
+		name := v
+		nodeManager.RWlock.Lock()
+		if !nodeManager.Exists(name) {
+			msg := "Skip this node as node is not exist."
+			plog.ErrorNode(name, msg)
+			if result != nil {
+				result[name] = msg
+			}
+			nodeManager.RWlock.Unlock()
+			continue
+		}
+		node := nodeManager.Nodes[name]
+		if node.GetStatus() == STATUS_CONNECTED {
+			node.StopConsole()
+		}
+		delete(nodeManager.Nodes, name)
+		nodeManager.RWlock.Unlock()
+		if result != nil {
+			result[name] = "Deleted"
+		}
+	}
+}
+
+func (m *NodeManager) DeleteNodes(names []string) map[string]string {
+	result := make(map[string]string)
+	if !m.stor.IsAsync() {
+		m.deleteNodes(names, result)
+		m.NotifyPersist(nil, common.ACTION_NIL)
+	} else {
+		for _, name := range names {
+			result[name] = "Accept"
+		}
+		m.NotifyPersist(names, common.ACTION_DELETE)
+	}
+	return result
+}
+
+func (m *NodeManager) NotifyPersist(node interface{}, action int) {
+	if !m.stor.IsAsync() {
+		storNodes := m.toStorNodes()
+		m.stor.NotifyPersist(storNodes, common.ACTION_NIL)
 		return
 	}
-	nodeBackupFile = path.Join(serverConfig.Console.DataDir, "nodes.json.bak")
-	if ok, _ := common.PathExists(nodeBackupFile); ok {
-		plog.Info(fmt.Sprintf("Trying to load node bakup file %s.", nodeBackupFile))
-		bytes, err := ioutil.ReadFile(nodeBackupFile)
-		if err != nil {
-			plog.Error(fmt.Sprintf("Could not read nonde backup file %s.", nodeBackupFile))
-			return
-		}
-		if err := json.Unmarshal(bytes, &nodeManager.Nodes); err != nil {
-			plog.Error(fmt.Sprintf("Could not parse node backup file %s.", nodeBackupFile))
-			return
-		}
-		go func() {
-			// as primary file can not be loaded, copy it from backup file
-			_, err = common.CopyFile(nodeConfigFile, nodeBackupFile)
-			if err != nil {
-				plog.Error(fmt.Sprintf("Unexpected error: %s, exit.", err))
-				panic(err)
-			}
-		}()
-	}
+	m.stor.NotifyPersist(node, action)
 }
 
-func (m *NodeManager) MakePersist() {
-	common.Notify(m.pending, &m.persistence, 1)
-}
-
-// a separate thread to save the data, avoid of frequent IO
-func (m *NodeManager) doPersist() {
-	common.Wait(m.pending, &m.persistence, 0, m.Save)
-}
-
-func (m *NodeManager) Exists(node string) bool {
-	if _, ok := m.Nodes[node]; ok {
+func (m *NodeManager) Exists(nodeName string) bool {
+	if _, ok := m.Nodes[nodeName]; ok {
 		return true
 	}
 	return false
+}
+
+func (m *NodeManager) PersistWatcher() {
+	if !m.stor.IsAsync() {
+		m.stor.PersistWatcher(nil)
+		return
+	}
+	eventChan := make(chan map[int][]byte, 1024)
+	go m.stor.PersistWatcher(eventChan)
+	for {
+		select {
+		case eventMap := <-eventChan:
+			if _, ok := eventMap[common.ACTION_PUT]; ok {
+				storNode := storage.NewNode()
+				if err := json.Unmarshal(eventMap[common.ACTION_PUT], storNode); err != nil {
+					plog.Error(err)
+					return
+				}
+				storNodes := make([]storage.Node, 0)
+				storNodes = append(storNodes, *storNode)
+				m.postNodes(storNodes, nil)
+			} else if _, ok := eventMap[common.ACTION_DELETE]; ok {
+				name := string(eventMap[common.ACTION_DELETE])
+				names := make([]string, 0)
+				names = append(names, name)
+				m.deleteNodes(names, nil)
+			} else {
+				plog.Error("Internal error")
+			}
+		}
+	}
 }

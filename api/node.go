@@ -9,12 +9,8 @@ import (
 
 	"github.com/chenglch/consoleserver/common"
 	"github.com/chenglch/consoleserver/console"
+	"github.com/chenglch/consoleserver/storage"
 	"github.com/gorilla/mux"
-)
-
-const (
-	CONSOLE_ON  = "on"
-	CONSOLE_OFF = "off"
 )
 
 var (
@@ -57,11 +53,7 @@ func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
 	var err error
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
-	nodes := make(map[string][]string)
-	nodes["nodes"] = make([]string, 0)
-	for _, node := range nodeManager.Nodes {
-		nodes["nodes"] = append(nodes["nodes"], node.Name)
-	}
+	nodes := nodeManager.ListNode()
 	if resp, err = json.Marshal(nodes); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
@@ -73,20 +65,13 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	var resp []byte
-	var err error
-	if !nodeManager.Exists(vars["node"]) {
-		err = errors.New(fmt.Sprintf("The node %s is not exist.", vars["node"]))
-		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+	node, httpcode, err := nodeManager.ShowNode(vars["node"])
+	if err != nil {
+		plog.HandleHttp(w, req, httpcode, err)
 		return
 	}
-	node := nodeManager.Nodes[vars["node"]]
-	if err := node.RequireLock(true); err != nil {
-		plog.HandleHttp(w, req, http.StatusConflict, err)
-		return
-	}
-	node.State = console.STATUS_MAP[node.GetStatus()]
-	node.Release(true)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+
 	if resp, err = json.Marshal(node); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
@@ -109,15 +94,10 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	state := req.URL.Query()["state"][0]
-	nodeManager.RWlock.RLock()
-	node := nodeManager.Nodes[vars["node"]]
-	nodeManager.RWlock.RUnlock()
-	if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
-		api.startConsole(node)
-	} else if state == CONSOLE_OFF && node.GetStatus() == console.STATUS_CONNECTED {
-		api.stopConsole(node)
-	}
-	plog.InfoNode(node.Name, fmt.Sprintf("The console state has been changed to %s.", state))
+	nodes := make([]string, 0)
+	nodes = append(nodes, vars["node"])
+	nodeManager.SetConsoleState(nodes, state)
+	plog.InfoNode(vars["node"], fmt.Sprintf("The console state has been changed to %s.", state))
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusAccepted)
 }
@@ -133,7 +113,7 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	state := req.URL.Query()["state"][0]
-	nodes := make(map[string][]console.Node, 0)
+	storNodes := make(map[string][]storage.Node, 0)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -143,33 +123,15 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
 		return
 	}
-	if err := json.Unmarshal(body, &nodes); err != nil {
+	if err := json.Unmarshal(body, &storNodes); err != nil {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	result := make(map[string]string)
-	for _, v := range nodes["nodes"] {
-		if v.Name == "" {
-			plog.Error("Skip this record as node name is not defined.")
-			continue
-		}
-		nodeManager.RWlock.Lock()
-		if !nodeManager.Exists(v.Name) {
-			msg := "Skip this node as node is not exist."
-			plog.ErrorNode(v.Name, msg)
-			result[v.Name] = msg
-			nodeManager.RWlock.Unlock()
-			continue
-		}
-		node := nodeManager.Nodes[v.Name]
-		nodeManager.RWlock.Unlock()
-		if state == CONSOLE_ON && node.GetStatus() != console.STATUS_CONNECTED {
-			api.startConsole(node)
-		} else if state == CONSOLE_OFF && node.GetStatus() == console.STATUS_CONNECTED {
-			api.stopConsole(node)
-		}
-		result[v.Name] = "Updated"
+	nodes := make([]string, len(storNodes["nodes"]))
+	for _, v := range storNodes["nodes"] {
+		nodes = append(nodes, v.Name)
 	}
+	result := nodeManager.SetConsoleState(nodes, state)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -181,7 +143,7 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 
 func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
-	node := console.NewNode()
+	node := storage.NewNode()
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -203,33 +165,19 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New("Driver is not defined"))
 		return
 	}
-	if err := node.Validate(); err != nil {
-		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+	httpcode, err := nodeManager.PostNode(node)
+	if err != nil {
+		plog.HandleHttp(w, req, httpcode, err)
 		return
 	}
-	nodeManager.RWlock.Lock()
-	if nodeManager.Exists(node.Name) {
-		err := errors.New(fmt.Sprintf("The node name %s is already exist", node.Name))
-		plog.HandleHttp(w, req, http.StatusAlreadyReported, err)
-		nodeManager.RWlock.Unlock()
-		return
-	}
-	node.SetStatus(console.STATUS_ENROLL)
-	nodeManager.Nodes[node.Name] = node
-	nodeManager.RWlock.Unlock()
-	nodeManager.MakePersist()
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusCreated)
-	plog.InfoNode(node.Name, "Created.")
-	if node.Ondemand == false {
-		api.startConsole(node)
-	}
 }
 
 func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
 	var resp []byte
-	nodes := make(map[string][]console.Node, 0)
+	nodes := make(map[string][]storage.Node)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -243,44 +191,7 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	result := make(map[string]string)
-	for _, v := range nodes["nodes"] {
-		// the silce pointer will be changed with the for loop, create a new variable.
-		node := v
-		node.Init()
-		if node.Name == "" {
-			plog.Error("Skip this record as node name is not defined.")
-			continue
-		}
-		if node.Driver == "" {
-			msg := "Driver is not defined."
-			plog.ErrorNode(node.Name, msg)
-			result[node.Name] = msg
-			continue
-		}
-		if err := node.Validate(); err != nil {
-			msg := "Failed to validate the node property."
-			plog.ErrorNode(node.Name, msg)
-			result[node.Name] = msg
-			continue
-		}
-		nodeManager.RWlock.Lock()
-		if nodeManager.Exists(node.Name) {
-			msg := "Skip this node as node is exist."
-			plog.ErrorNode(node.Name, msg)
-			result[node.Name] = msg
-			nodeManager.RWlock.Unlock()
-			continue
-		}
-		node.SetStatus(console.STATUS_ENROLL)
-		nodeManager.Nodes[node.Name] = &node
-		nodeManager.RWlock.Unlock()
-		result[node.Name] = "Created"
-		if node.Ondemand == false {
-			api.startConsole(&node)
-		}
-	}
-	nodeManager.MakePersist()
+	result := nodeManager.PostNodes(nodes)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -293,27 +204,19 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
-	nodeManager.RWlock.Lock()
-	if !nodeManager.Exists(vars["node"]) {
-		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New(fmt.Sprintf("Node %s is not exist", vars["node"])))
-		nodeManager.RWlock.Unlock()
+	httpcode, err := nodeManager.DeleteNode(vars["node"])
+	if err != nil {
+		plog.HandleHttp(w, req, httpcode, err)
 		return
 	}
-	node := nodeManager.Nodes[vars["node"]]
-	if node.GetStatus() == console.STATUS_CONNECTED {
-		go api.stopConsole(node)
-	}
-	delete(nodeManager.Nodes, vars["node"])
-	nodeManager.RWlock.Unlock()
-	nodeManager.MakePersist()
-	plog.InfoNode(node.Name, "Deteled.")
+	plog.InfoNode(vars["node"], "Deteled.")
 	w.WriteHeader(http.StatusAccepted)
 }
 
 func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 	plog.Debug(fmt.Sprintf("Receive %s request %s from %s.", req.Method, req.URL.Path, req.RemoteAddr))
 	var resp []byte
-	nodes := make(map[string][]console.Node, 0)
+	nodes := make(map[string][]storage.Node, 0)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -327,29 +230,11 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	result := make(map[string]string)
-	for _, v := range nodes["nodes"] {
-		if v.Name == "" {
-			plog.Error("Skip this record as node name is not defined.")
-			continue
-		}
-		nodeManager.RWlock.Lock()
-		if !nodeManager.Exists(v.Name) {
-			msg := "Skip this node as node is not exist."
-			plog.ErrorNode(v.Name, msg)
-			result[v.Name] = msg
-			nodeManager.RWlock.Unlock()
-			continue
-		}
-		node := nodeManager.Nodes[v.Name]
-		if node.GetStatus() == console.STATUS_CONNECTED {
-			go api.stopConsole(node)
-		}
-		delete(nodeManager.Nodes, v.Name)
-		nodeManager.RWlock.Unlock()
-		result[v.Name] = "Deleted"
+	names := make([]string, len(nodes["nodes"]))
+	for _, node := range nodes["nodes"] {
+		names = append(names, node.Name)
 	}
-	nodeManager.MakePersist()
+	result := nodeManager.DeleteNodes(names)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
@@ -357,34 +242,4 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "%s\n", resp)
-}
-
-func (api *NodeApi) startConsole(node *console.Node) {
-	if err := node.RequireLock(false); err != nil {
-		plog.ErrorNode(node.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
-		return
-	}
-	if node.GetStatus() == console.STATUS_CONNECTED {
-		node.Release(false)
-		return
-	}
-	go node.StartConsole()
-	// open a new groutine to make the rest request asynchronous
-	go func() {
-		if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
-			plog.ErrorNode(node.Name, err)
-		}
-		node.Release(false)
-	}()
-}
-
-func (api *NodeApi) stopConsole(node *console.Node) {
-	if err := node.RequireLock(false); err != nil {
-		nodeManager.RWlock.Unlock()
-		return
-	}
-	if node.GetStatus() == console.STATUS_CONNECTED {
-		node.StopConsole()
-	}
-	node.Release(false)
 }
