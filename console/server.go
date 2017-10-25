@@ -403,9 +403,16 @@ func (m *NodeManager) initNodes() {
 
 func (m *NodeManager) ListNode() map[string][]string {
 	nodes := make(map[string][]string)
-	nodes["nodes"] = make([]string, 0)
-	for _, node := range nodeManager.Nodes {
-		nodes["nodes"] = append(nodes["nodes"], node.StorageNode.Name)
+	if !m.stor.IsAsync() {
+		nodes["nodes"] = make([]string, 0)
+		for _, node := range nodeManager.Nodes {
+			nodes["nodes"] = append(nodes["nodes"], node.StorageNode.Name)
+		}
+	} else {
+		nodeWithHost := m.stor.ListNodeWithHost()
+		for k, _ := range nodeWithHost {
+			nodes["nodes"] = append(nodes["nodes"], k)
+		}
 	}
 	return nodes
 }

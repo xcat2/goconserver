@@ -129,3 +129,7 @@ func (s *FileStorage) save() {
 func (s *FileStorage) IsAsync() bool {
 	return false
 }
+
+func (s *FileStorage) ListNodeWithHost() map[string]string {
+	return nil
+}

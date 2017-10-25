@@ -68,9 +68,7 @@ func (s *EtcdStorage) register() error {
 func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 	var err error
 	if cli == nil {
-		cli, err = s.getClient()
-	}
-	if err != nil {
+		err = errors.New("Please initialize the client for etcd")
 		return nil, err
 	}
 	key := fmt.Sprintf("/consoleserver/hosts/%s", s.hostname)
@@ -128,19 +126,16 @@ func (s *EtcdStorage) ImportNodes() {
 	}
 }
 
-func (s *EtcdStorage) getHostCount(cli *clientv3.Client) map[string]int {
+func (s *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error) {
 	var err error
 	if cli == nil {
-		cli, err = s.getClient()
-		if err != nil {
-			plog.Error(err)
-			return nil
-		}
+		err = errors.New("Please initialize the client for etcd")
+		return nil, err
 	}
 	hosts, err := s.getHosts(cli)
 	if err != nil {
 		plog.Error(err)
-		return nil
+		return nil, err
 	}
 	hostsCount := make(map[string]int)
 	for _, host := range hosts {
@@ -153,17 +148,50 @@ func (s *EtcdStorage) getHostCount(cli *clientv3.Client) map[string]int {
 		}
 		hostsCount[host] = int(resp.Count)
 	}
-	return hostsCount
+	return hostsCount, nil
 }
 
 func (s *EtcdStorage) getMinHost(hostsCount map[string]int) string {
 	minHost := ""
 	minCount := common.Maxint32
 	for k, v := range hostsCount {
+		if v == -1 {
+			continue
+		}
 		minCount = common.If(v < minCount, v, minCount).(int)
 		minHost = k
 	}
 	return minHost
+}
+
+func (s *EtcdStorage) ListNodeWithHost() map[string]string {
+	cli, err := s.getClient()
+	if err != nil {
+		plog.Error(err)
+		return nil
+	}
+	hosts, err := s.getHosts(cli)
+	if err != nil {
+		plog.Error(err)
+		return nil
+	}
+	hostNodes := make(map[string]string)
+	for _, host := range hosts {
+		key := fmt.Sprintf("/consoleserver/%s/nodes/", host)
+		resp, err := cli.Get(context.TODO(), key, clientv3.WithPrefix())
+		if err != nil {
+			plog.Error(err)
+			continue
+		}
+		for _, v := range resp.Kvs {
+			if string(v.Key) == key {
+				continue
+			}
+			vals := strings.Split(string(v.Key), "/")
+			hostNodes[vals[len(vals)-1]] = host
+		}
+	}
+	return hostNodes
 }
 
 func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
@@ -178,9 +206,17 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 			return
 		}
 		defer cli.Close()
-		hostsCount := s.getHostCount(cli)
+		hostsCount, err := s.getHostCount(cli)
+		if err != nil {
+			plog.Error(err)
+			return
+		}
 		for _, v := range nodes.(map[string][]Node)["nodes"] {
 			hostname := s.getMinHost(hostsCount)
+			if hostname == "" {
+				plog.Error("Could not find proper host")
+				return
+			}
 			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", hostname, v.Name)
 			b, err := json.Marshal(v)
 			if err != nil {
@@ -192,6 +228,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 				plog.ErrorNode(v.Name, err)
 				continue
 			}
+			hostsCount[hostname] ++
 		}
 	} else if action == common.ACTION_DELETE {
 		if reflect.TypeOf(nodes).Kind() != reflect.Slice {

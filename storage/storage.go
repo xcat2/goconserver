@@ -38,6 +38,7 @@ type StorInterface interface {
 	GetNodes() map[string]*Node
 	NotifyPersist(interface{}, int)
 	IsAsync() bool
+	ListNodeWithHost() map[string]string
 }
 
 func NewStorage(storType string) (StorInterface, error) {
