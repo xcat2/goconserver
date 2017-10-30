@@ -34,16 +34,17 @@ type ServerConfig struct {
 		LogDir        string `yaml:"logdir"`
 		ClientTimeout int    `yaml:"client_timeout"`
 		TargetTimeout int    `yaml:"target_timeout"`
+		RPCPort       string `yaml:"rpcport"`
 	}
 	Etcd struct {
 		DailTimeout    int    `yaml:"dail_timeout"`
 		RequestTimeout int    `yaml:"request_timeout"`
-		Endpoints      string `yaml:endpoints`
+		Endpoints      string `yaml:"endpoints"`
 	}
 }
 
 func InitServerConfig(confFile string) (*ServerConfig, error) {
-	serverConfig.Global.Host = "0.0.0.0"
+	serverConfig.Global.Host = "127.0.0.1"
 	serverConfig.Global.LogFile = ""
 	serverConfig.Global.Worker = 1
 	serverConfig.Global.LogLevel = "info"
@@ -55,6 +56,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
+	serverConfig.Console.RPCPort = "12431" // only for async storage type
 	serverConfig.Etcd.DailTimeout = 5
 	serverConfig.Etcd.RequestTimeout = 2
 	serverConfig.Etcd.Endpoints = "127.0.0.1:2379"

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package consolepb;
+
+service ConsoleManager {
+  rpc ShowNode (NodeName) returns (Node) {};
+}
+
+message NodeName {
+  string name = 1;
+}
+
+message Node {
+  string name = 1;
+  string driver = 2;
+  map<string, string> params = 3;
+  bool ondemand = 4;
+  int32 status = 5;
+}

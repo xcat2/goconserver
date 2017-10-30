@@ -9,6 +9,29 @@ import (
 	"time"
 )
 
+var (
+	CIPHER_SUITES = []uint16{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_RC4_128_SHA,
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+		tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+	}
+)
+
 type Network struct {
 }
 
@@ -134,7 +157,10 @@ func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, ser
 		return nil, err
 	}
 	pool.AppendCertsFromPEM(caCert)
-	tlsConfig := tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, ServerName: serverHost}
+	tlsConfig := tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, ServerName: serverHost,
+		CipherSuites:             CIPHER_SUITES,
+		MinVersion:               tls.VersionTLS12,
+		PreferServerCipherSuites: true}
 	tlsConfig.BuildNameToCertificate()
 	return &tlsConfig, nil
 }
@@ -151,7 +177,10 @@ func LoadServerTlsConfig(certPath string, keyPath string, caCertPath string) (*t
 	}
 	pool.AppendCertsFromPEM(caCert)
 	tlsConfig := tls.Config{ClientCAs: pool, Certificates: []tls.Certificate{cert},
-		ClientAuth: tls.RequireAnyClientCert}
+		ClientAuth:               tls.RequireAnyClientCert,
+		CipherSuites:             CIPHER_SUITES,
+		MinVersion:               tls.VersionTLS12,
+		PreferServerCipherSuites: true}
 	tlsConfig.Rand = rand.Reader
 	return &tlsConfig, nil
 }

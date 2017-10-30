@@ -1,13 +1,18 @@
 package console
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/chenglch/consoleserver/common"
+	pb "github.com/chenglch/consoleserver/console/consolepb"
 	"github.com/chenglch/consoleserver/plugins"
 	"github.com/chenglch/consoleserver/storage"
+	net_context "golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"net"
 	"net/http"
 	"os"
@@ -59,6 +64,17 @@ func NewNode(storNode *storage.Node) *Node {
 	node.logging = false
 	node.rwLock = new(sync.RWMutex)
 	node.reserve = common.TYPE_NO_LOCK
+	return node
+}
+
+func NewNodeFrom(pbNode *pb.Node) *Node {
+	node := new(Node)
+	node.StorageNode = new(storage.Node)
+	node.StorageNode.Name = pbNode.Name
+	node.StorageNode.Driver = pbNode.Driver
+	node.StorageNode.Ondemand = pbNode.Ondemand
+	node.StorageNode.Params = pbNode.Params
+	node.State = STATUS_MAP[int(pbNode.Status)]
 	return node
 }
 
@@ -280,7 +296,6 @@ func (c *ConsoleServer) Listen() {
 		tlsConfig, err := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
 			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile)
 		if err != nil {
-			plog.Error(err)
 			panic(err)
 		}
 		listener, err = tls.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port), tlsConfig)
@@ -325,9 +340,10 @@ func (c *ConsoleServer) registerSignal() {
 }
 
 type NodeManager struct {
-	Nodes  map[string]*Node
-	RWlock *sync.RWMutex
-	stor   storage.StorInterface
+	Nodes     map[string]*Node
+	RWlock    *sync.RWMutex
+	stor      storage.StorInterface
+	rpcServer *ConsoleRPCServer
 }
 
 func GetNodeManager() *NodeManager {
@@ -347,6 +363,10 @@ func GetNodeManager() *NodeManager {
 		nodeManager.initNodes()
 		go nodeManager.PersistWatcher()
 		go consoleServer.Listen()
+		if nodeManager.stor.SupportWatcher() {
+			nodeManager.rpcServer = newConsoleRPCServer()
+			nodeManager.rpcServer.serve()
+		}
 	}
 	return nodeManager
 }
@@ -401,17 +421,23 @@ func (m *NodeManager) initNodes() {
 	}
 }
 
-func (m *NodeManager) ListNode() map[string][]string {
-	nodes := make(map[string][]string)
-	if !m.stor.IsAsync() {
-		nodes["nodes"] = make([]string, 0)
+func (m *NodeManager) ListNode() map[string][]map[string]string {
+	nodes := make(map[string][]map[string]string)
+	nodes["nodes"] = make([]map[string]string, 0)
+	if !m.stor.SupportWatcher() {
 		for _, node := range nodeManager.Nodes {
-			nodes["nodes"] = append(nodes["nodes"], node.StorageNode.Name)
+			nodeMap := make(map[string]string)
+			nodeMap["name"] = node.StorageNode.Name
+			nodeMap["host"] = serverConfig.Global.Host
+			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
 	} else {
 		nodeWithHost := m.stor.ListNodeWithHost()
-		for k, _ := range nodeWithHost {
-			nodes["nodes"] = append(nodes["nodes"], k)
+		for node, host := range nodeWithHost {
+			nodeMap := make(map[string]string)
+			nodeMap["name"] = node
+			nodeMap["host"] = host
+			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
 	}
 	return nodes
@@ -419,16 +445,35 @@ func (m *NodeManager) ListNode() map[string][]string {
 
 func (m *NodeManager) ShowNode(name string) (*Node, int, error) {
 	var err error
-	if !nodeManager.Exists(name) {
-		err = errors.New(fmt.Sprintf("The node %s is not exist.", name))
-		return nil, http.StatusBadRequest, err
+	var node *Node
+	if !m.stor.SupportWatcher() {
+		if !nodeManager.Exists(name) {
+			err = errors.New(fmt.Sprintf("The node %s is not exist.", name))
+			return nil, http.StatusBadRequest, err
+		}
+		node = nodeManager.Nodes[name]
+		if err := node.RequireLock(true); err != nil {
+			return nil, http.StatusConflict, err
+		}
+		node.State = STATUS_MAP[node.GetStatus()]
+		node.Release(true)
+	} else {
+		nodeWithHost := m.stor.ListNodeWithHost()
+		if nodeWithHost == nil {
+			err = errors.New("Could not get host information, please check the storage connection")
+			return nil, http.StatusInternalServerError, err
+		}
+		if _, ok := nodeWithHost[name]; !ok {
+			err = errors.New(fmt.Sprintf("Could not get host information for node %s", name))
+			return nil, http.StatusBadRequest, err
+		}
+		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		pbNode, err := cRPCClient.ShowNode(name)
+		if err != nil {
+			return nil, http.StatusInternalServerError, err
+		}
+		node = NewNodeFrom(pbNode)
 	}
-	node := nodeManager.Nodes[name]
-	if err := node.RequireLock(true); err != nil {
-		return nil, http.StatusConflict, err
-	}
-	node.State = STATUS_MAP[node.GetStatus()]
-	node.Release(true)
 	return node, http.StatusOK, nil
 }
 
@@ -460,7 +505,7 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 }
 
 func (m *NodeManager) PostNode(storNode *storage.Node) (int, error) {
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		node := NewNode(storNode)
 		if err := node.Validate(); err != nil {
 			return http.StatusBadRequest, err
@@ -538,7 +583,7 @@ func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]stri
 
 func (m *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]string {
 	result := make(map[string]string)
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		m.postNodes(storNodes["nodes"], result)
 		m.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
@@ -551,7 +596,7 @@ func (m *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]
 }
 
 func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		nodeManager.RWlock.Lock()
 		if !nodeManager.Exists(nodeName) {
 			nodeManager.RWlock.Unlock()
@@ -603,7 +648,7 @@ func (m *NodeManager) deleteNodes(names []string, result map[string]string) {
 
 func (m *NodeManager) DeleteNodes(names []string) map[string]string {
 	result := make(map[string]string)
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		m.deleteNodes(names, result)
 		m.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
@@ -616,7 +661,7 @@ func (m *NodeManager) DeleteNodes(names []string) map[string]string {
 }
 
 func (m *NodeManager) NotifyPersist(node interface{}, action int) {
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		storNodes := m.toStorNodes()
 		m.stor.NotifyPersist(storNodes, common.ACTION_NIL)
 		return
@@ -632,7 +677,7 @@ func (m *NodeManager) Exists(nodeName string) bool {
 }
 
 func (m *NodeManager) PersistWatcher() {
-	if !m.stor.IsAsync() {
+	if !m.stor.SupportWatcher() {
 		m.stor.PersistWatcher(nil)
 		return
 	}
@@ -660,4 +705,96 @@ func (m *NodeManager) PersistWatcher() {
 			}
 		}
 	}
+}
+
+type ConsoleRPCServer struct {
+	port   string
+	host   string
+	server *grpc.Server
+}
+
+func newConsoleRPCServer() *ConsoleRPCServer {
+	return &ConsoleRPCServer{port: serverConfig.Console.RPCPort, host: serverConfig.Global.Host}
+}
+
+func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
+	nodeManager.RWlock.RLock()
+	if !nodeManager.Exists(rpcNode.Name) {
+		nodeManager.RWlock.RUnlock()
+		return nil, errors.New(fmt.Sprintf("Could not find node %s on %s", rpcNode.Name, serverConfig.Global.Host))
+	}
+	node := nodeManager.Nodes[rpcNode.Name]
+	retNode := pb.Node{Name: node.StorageNode.Name,
+		Driver:   node.StorageNode.Driver,
+		Params:   node.StorageNode.Params,
+		Ondemand: node.StorageNode.Ondemand,
+		Status:   int32(node.status)}
+	nodeManager.RWlock.RUnlock()
+	return &retNode, nil
+}
+
+func (cRPCServer *ConsoleRPCServer) serve() {
+	var creds credentials.TransportCredentials
+	var err error
+	var s *grpc.Server
+	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
+		tlsConfig, err := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
+			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile)
+		if err != nil {
+			panic(err)
+		}
+		creds = credentials.NewTLS(tlsConfig)
+	}
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", cRPCServer.host, cRPCServer.port))
+	if err != nil {
+		panic(err)
+	}
+	if creds != nil {
+		s = grpc.NewServer(grpc.Creds(creds))
+	} else {
+		s = grpc.NewServer()
+	}
+	pb.RegisterConsoleManagerServer(s, cRPCServer)
+	plog.Debug(fmt.Sprintf("Rpc server is listening on %s:%s", cRPCServer.host, cRPCServer.port))
+	go s.Serve(lis)
+}
+
+type ConsoleRPCClient struct {
+	host string
+	port string
+}
+
+func newConsoleRPCClient(host string, port string) *ConsoleRPCClient {
+	return &ConsoleRPCClient{host: host, port: port}
+}
+
+func (cRPCClient *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
+	var creds credentials.TransportCredentials
+	var err error
+	var conn *grpc.ClientConn
+	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
+		tlsConfig, err := common.LoadClientTlsConfig(serverConfig.Global.SSLCertFile,
+			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile, cRPCClient.host)
+		if err != nil {
+			panic(err)
+		}
+		creds = credentials.NewTLS(tlsConfig)
+	}
+	addr := fmt.Sprintf("%s:%s", cRPCClient.host, cRPCClient.port)
+	if creds != nil {
+		conn, err = grpc.Dial(addr, grpc.WithTransportCredentials(creds))
+	} else {
+		conn, err = grpc.Dial(addr, grpc.WithInsecure())
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	c := pb.NewConsoleManagerClient(conn)
+	node, err := c.ShowNode(context.Background(), &pb.NodeName{Name: name})
+	if err != nil {
+		plog.Error(err)
+		return nil, err
+	}
+	return node, nil
 }

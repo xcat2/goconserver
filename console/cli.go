@@ -94,8 +94,9 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Could not list resources, %s\n", err.Error())
 		os.Exit(1)
 	}
-	for _, node := range nodes {
-		fmt.Printf("%s (node)\n", node)
+	for _, v := range nodes {
+		node := v.(map[string]interface{})
+		fmt.Printf("%s (host: %s)\n", node["name"], node["host"])
 	}
 }
 

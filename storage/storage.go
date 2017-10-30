@@ -37,7 +37,7 @@ type StorInterface interface {
 	PersistWatcher(eventChan chan map[int][]byte)
 	GetNodes() map[string]*Node
 	NotifyPersist(interface{}, int)
-	IsAsync() bool
+	SupportWatcher() bool
 	ListNodeWithHost() map[string]string
 }
 

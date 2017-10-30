@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/coreos/etcd/clientv3"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -26,10 +25,11 @@ type EtcdStorage struct {
 	endpoints      []string
 	dialTimeout    time.Duration
 	requestTimeout time.Duration
-	hostname       string
+	host           string
 }
 
 func newEtcdStorage() StorInterface {
+	var err error
 	stor := new(Storage)
 	stor.async = true
 	stor.Nodes = make(map[string]*Node)
@@ -38,11 +38,7 @@ func newEtcdStorage() StorInterface {
 	etcdStor.endpoints = strings.Split(serverConfig.Etcd.Endpoints, " ")
 	etcdStor.dialTimeout = time.Duration(serverConfig.Etcd.DailTimeout) * time.Second
 	etcdStor.requestTimeout = time.Duration(serverConfig.Etcd.RequestTimeout) * time.Second
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-	etcdStor.hostname = hostname
+	etcdStor.host = serverConfig.Global.Host
 	err = etcdStor.register()
 	if err != nil {
 		panic(err)
@@ -55,8 +51,8 @@ func (s *EtcdStorage) register() error {
 	if err != nil {
 		return err
 	}
-	key := fmt.Sprintf("/consoleserver/hosts/%s", s.hostname)
-	_, err = cli.Put(context.TODO(), key, s.hostname)
+	key := fmt.Sprintf("/consoleserver/hosts/%s", s.host)
+	_, err = cli.Put(context.TODO(), key, s.host)
 	if err != nil {
 		plog.Error(err)
 		return err
@@ -71,8 +67,7 @@ func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 		err = errors.New("Please initialize the client for etcd")
 		return nil, err
 	}
-	key := fmt.Sprintf("/consoleserver/hosts/%s", s.hostname)
-	resp, err := cli.Get(context.TODO(), key, clientv3.WithPrefix())
+	resp, err := cli.Get(context.TODO(), "/consoleserver/hosts", clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +90,7 @@ func (s *EtcdStorage) getClient() (*clientv3.Client, error) {
 }
 
 func (s *EtcdStorage) ImportNodes() {
-	dirKey := fmt.Sprintf("/consoleserver/%s/nodes", s.hostname)
+	dirKey := fmt.Sprintf("/consoleserver/%s/nodes", s.host)
 	cli, err := s.getClient()
 	if err != nil {
 		plog.Error(err)
@@ -159,7 +154,9 @@ func (s *EtcdStorage) getMinHost(hostsCount map[string]int) string {
 			continue
 		}
 		minCount = common.If(v < minCount, v, minCount).(int)
-		minHost = k
+		if v == minCount {
+			minHost = k
+		}
 	}
 	return minHost
 }
@@ -212,12 +209,12 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 			return
 		}
 		for _, v := range nodes.(map[string][]Node)["nodes"] {
-			hostname := s.getMinHost(hostsCount)
-			if hostname == "" {
+			host := s.getMinHost(hostsCount)
+			if host == "" {
 				plog.Error("Could not find proper host")
 				return
 			}
-			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", hostname, v.Name)
+			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", host, v.Name)
 			b, err := json.Marshal(v)
 			if err != nil {
 				plog.ErrorNode(v.Name, err)
@@ -228,7 +225,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 				plog.ErrorNode(v.Name, err)
 				continue
 			}
-			hostsCount[hostname] ++
+			hostsCount[host]++
 		}
 	} else if action == common.ACTION_DELETE {
 		if reflect.TypeOf(nodes).Kind() != reflect.Slice {
@@ -242,7 +239,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 		}
 		defer cli.Close()
 		for _, v := range nodes.([]string) {
-			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", s.hostname, v)
+			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", s.host, v)
 			_, err = cli.Delete(context.TODO(), key)
 			if err != nil {
 				plog.ErrorNode(v, err)
@@ -261,7 +258,7 @@ func (s *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
 		return
 	}
 	defer cli.Close()
-	key := fmt.Sprintf("/consoleserver/%s/nodes/", s.hostname)
+	key := fmt.Sprintf("/consoleserver/%s/nodes/", s.host)
 	changes := cli.Watch(context.Background(), key, clientv3.WithPrefix())
 	for resp := range changes {
 		for _, ev := range resp.Events {
@@ -280,6 +277,6 @@ func (s *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
 	}
 }
 
-func (s *EtcdStorage) IsAsync() bool {
+func (s *EtcdStorage) SupportWatcher() bool {
 	return true
 }

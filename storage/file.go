@@ -126,7 +126,7 @@ func (s *FileStorage) save() {
 	}()
 }
 
-func (s *FileStorage) IsAsync() bool {
+func (s *FileStorage) SupportWatcher() bool {
 	return false
 }
 

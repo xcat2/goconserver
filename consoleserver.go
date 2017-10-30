@@ -46,7 +46,11 @@ func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {
 	}
 	pool.AppendCertsFromPEM(caCrt)
 	sslEnable = true
-	return &tls.Config{ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert}
+	return &tls.Config{ClientCAs: pool,
+		ClientAuth:               tls.RequireAndVerifyClientCert,
+		CipherSuites:             common.CIPHER_SUITES,
+		MinVersion:               tls.VersionTLS12,
+		PreferServerCipherSuites: true}
 }
 
 func main() {
