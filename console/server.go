@@ -27,6 +27,7 @@ const (
 	STATUS_ENROLL
 	STATUS_CONNECTED
 	STATUS_ERROR
+	STATUS_REDIRECT
 
 	CONSOLE_ON            = "on"
 	CONSOLE_OFF           = "off"
@@ -230,6 +231,7 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 }
 
 func (c *ConsoleServer) handle(conn interface{}) {
+	var err error
 	plog.Debug("New client connection received.")
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	size, err := c.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
@@ -245,22 +247,56 @@ func (c *ConsoleServer) handle(conn interface{}) {
 	data := make(map[string]string)
 	if err := json.Unmarshal(b, &data); err != nil {
 		plog.Error(err)
-		c.SendInt(conn.(net.Conn), STATUS_ERROR)
+		err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+		if err != nil {
+			plog.Error(err)
+		}
 		conn.(net.Conn).Close()
 		return
 	}
 	if _, ok := nodeManager.Nodes[data["name"]]; !ok {
-		plog.ErrorNode(data["name"], "Could not find this node.")
-		c.SendInt(conn.(net.Conn), STATUS_ERROR)
-		conn.(net.Conn).Close()
+		defer conn.(net.Conn).Close()
+		if !nodeManager.stor.SupportWatcher() {
+			plog.ErrorNode(data["name"], "Could not find this node.")
+			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+			if err != nil {
+				plog.ErrorNode(data["name"], err)
+			}
+			return
+		} else {
+			nodeWithHost := nodeManager.stor.ListNodeWithHost()
+			if _, ok := nodeWithHost[data["name"]]; !ok {
+				plog.ErrorNode(data["name"], "Could not find this node.")
+				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+				if err != nil {
+					plog.ErrorNode(data["name"], err)
+				}
+				return
+			}
+			host := nodeWithHost[data["name"]]
+			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
+			if err != nil {
+				plog.ErrorNode(data["name"], err)
+				return
+			}
+			err = c.SendByteWithLength(conn.(net.Conn), []byte(host))
+			if err != nil {
+				plog.ErrorNode(data["name"], err)
+				return
+			}
+			plog.InfoNode(data["name"], fmt.Sprintf("Redirect the session to %s", host))
+		}
 		return
 	}
 	node := nodeManager.Nodes[data["name"]]
 	if data["command"] == COMMAND_START_CONSOLE {
 		if node.status != STATUS_CONNECTED {
-			if err := node.RequireLock(false); err != nil {
+			if err = node.RequireLock(false); err != nil {
 				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-				c.SendInt(conn.(net.Conn), STATUS_ERROR)
+				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+				if err != nil {
+					plog.ErrorNode(data["name"], err)
+				}
 				conn.(net.Conn).Close()
 				return
 			}
@@ -268,10 +304,13 @@ func (c *ConsoleServer) handle(conn interface{}) {
 				node.Release(false)
 			} else {
 				go node.startConsole()
-				if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
+				if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 					node.Release(false)
-					c.SendInt(conn.(net.Conn), STATUS_ERROR)
+					err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+					if err != nil {
+						plog.ErrorNode(data["name"], err)
+					}
 					conn.(net.Conn).Close()
 					return
 				}
@@ -280,10 +319,16 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		if node.status == STATUS_CONNECTED {
 			plog.InfoNode(node.StorageNode.Name, "Register client connection successfully.")
 			// reply success message to the client
-			c.SendInt(conn.(net.Conn), STATUS_CONNECTED)
+			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
+			if err != nil {
+				plog.ErrorNode(data["name"], err)
+			}
 			node.console.Accept(conn.(net.Conn))
 		} else {
-			c.SendInt(conn.(net.Conn), STATUS_ERROR)
+			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+			if err != nil {
+				plog.ErrorNode(data["name"], err)
+			}
 			conn.(net.Conn).Close()
 		}
 	}

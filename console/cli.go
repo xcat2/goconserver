@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/chenglch/consoleserver/common"
 	"github.com/spf13/cobra"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -94,6 +95,10 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Could not list resources, %s\n", err.Error())
 		os.Exit(1)
 	}
+	if len(nodes) == 0 {
+		fmt.Printf("Could not find any record.\n")
+		os.Exit(0)
+	}
 	for _, v := range nodes {
 		node := v.(map[string]interface{})
 		fmt.Printf("%s (host: %s)\n", node["name"], node["host"])
@@ -173,6 +178,7 @@ func (c *CongoCli) delete(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
+	fmt.Printf("Deleted\n")
 }
 
 func (c *CongoCli) createCommand() *cobra.Command {
@@ -209,6 +215,7 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
+	fmt.Printf("Created\n")
 }
 
 func (c *CongoCli) consoleCommand() *cobra.Command {
@@ -223,6 +230,7 @@ func (c *CongoCli) consoleCommand() *cobra.Command {
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
+	var conn net.Conn
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
 		os.Exit(1)
@@ -233,5 +241,16 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 	if err != nil {
 		panic(err)
 	}
-	client.Handle(conn, args[0])
+	host, err := client.Handle(conn, args[0])
+	if err == nil && host != "" {
+		client = NewConsoleClient(host, clientConfig.ConsolePort)
+		conn, err = client.Connect()
+		if err != nil {
+			panic(err)
+		}
+		_, err = client.Handle(conn, args[0])
+	}
+	if err != nil {
+		panic(err)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"github.com/chenglch/consoleserver/common"
 	"golang.org/x/crypto/ssh/terminal"
+	"io"
 	"net/http"
 	neturl "net/url"
 	"strings"
@@ -92,38 +93,55 @@ func (c *ConsoleClient) checkEscape(b []byte, n int) int {
 	return 0
 }
 
-func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
+func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 	m := make(map[string]string)
 	m["name"] = name
-	m["command"] = "start_console"
+	m["command"] = COMMAND_START_CONSOLE
 	b, err := json.Marshal(m)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
-		return err
+		return STATUS_ERROR, err
 	}
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	err = c.SendByteWithLengthTimeout(conn, b, consoleTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
-		return err
+		return STATUS_ERROR, err
 	}
 	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
-		return err
+		return STATUS_ERROR, err
+	}
+	return status, nil
+}
+
+func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
+	defer conn.Close()
+	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
+	status, err := c.tryConnect(conn, name)
+	if status == STATUS_REDIRECT {
+		n, err := c.ReceiveIntTimeout(conn, consoleTimeout)
+		if err != nil {
+			return "", err
+		}
+		b, err := c.ReceiveBytesTimeout(conn, n, consoleTimeout)
+		if err != nil && err != io.EOF {
+			return "", err
+		}
+		plog.InfoNode(name, fmt.Sprintf("Redirect the node connecteion to %s", string(b)))
+		return string(b), nil
 	}
 	if status != STATUS_CONNECTED {
-		fmt.Fprintf(os.Stderr, "Fatal error: Could not connect to %s\n", name)
-		return err
+		err = errors.New(fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
+		return "", err
 	}
 	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
-		fmt.Fprintf(os.Stderr, "Fatal error: stdin is not terminal")
-		return errors.New("stdin is not terminal")
+		return "", errors.New("Fatal error: stdin is not terminal")
 	}
 	c.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
-		return err
+		return "", err
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
 	c.registerSignal()
@@ -131,23 +149,19 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) error {
 	sendBuf := make([]byte, 4096)
 	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, sendBuf)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
-		return err
+		return "", err
 	}
 	defer common.GetTaskManager().Stop(c.inputTask.GetID())
 	c.outputTask, err = common.GetTaskManager().RegisterLoop(c.output, conn, recvBuf)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
-		return err
+		return "", err
 	}
 	defer common.GetTaskManager().Stop(c.outputTask.GetID())
-	defer conn.Close()
-
 	select {
 	case <-c.exit:
 		break
 	}
-	return nil
+	return "", nil
 }
 
 func (s *ConsoleClient) Connect() (net.Conn, error) {
@@ -175,7 +189,7 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 	}
 	if clientConfig.SSLCertFile != "" && clientConfig.SSLKeyFile != "" && clientConfig.SSLCACertFile != "" {
 		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile, clientConfig.SSLKeyFile,
-			clientConfig.SSLCACertFile, clientConfig.ServerHost)
+			clientConfig.SSLCACertFile, s.host)
 		if err != nil {
 			panic(err)
 		}

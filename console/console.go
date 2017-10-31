@@ -93,13 +93,25 @@ func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
+	welcome := fmt.Sprintf("Hello %s: welcome to the session of %s\r\n", conn.RemoteAddr().String(), c.node.StorageNode.Name)
+	err := c.network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
+	if err != nil {
+		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+		return
+	}
+	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
+	err = c.logger(logFile, []byte(welcome))
+	if err != nil {
+		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+		return
+	}
 	for {
 		if _, ok := c.bufConn[conn]; !ok {
 			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
 		b := <-c.bufConn[conn]
-		err := c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
+		err = c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
 			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
@@ -112,6 +124,7 @@ func (c *Console) readTarget() {
 	var err error
 	var n int
 	b := make([]byte, 4096)
+	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
 	for {
 		select {
 		case <-c.stop:
@@ -126,7 +139,11 @@ func (c *Console) readTarget() {
 		}
 		if n > 0 {
 			c.writeClientChan(b[:n])
-			c.logger(fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name), b[:n])
+			err = c.logger(logFile, b[:n])
+			if err != nil {
+				plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+				return
+			}
 		}
 	}
 }
@@ -169,7 +186,7 @@ func (c *Console) Close() {
 func (c *Console) logger(path string, b []byte) error {
 	if path != "" {
 		var err error
-		fd, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+		fd, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			plog.ErrorNode(c.node.StorageNode.Name, err)
 			return err

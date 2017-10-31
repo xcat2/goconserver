@@ -130,6 +130,17 @@ func (s *Network) SendInt(conn net.Conn, num int) error {
 	return s.SendBytes(conn, b)
 }
 
+func (s *Network) SendIntWithTimeout(conn net.Conn, num int, timeout time.Duration) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout * time.Second)); err != nil {
+		return err
+	}
+	b := IntToBytes(num)
+	if err := s.SendBytes(conn, b); err != nil {
+		return err
+	}
+	return s.ResetWriteTimeout(conn)
+}
+
 func (s *Network) SendByteWithLength(conn net.Conn, b []byte) error {
 	lenBytes := IntToBytes(len(b))
 	b = append(lenBytes, b...)
