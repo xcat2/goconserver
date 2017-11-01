@@ -93,7 +93,8 @@ func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	welcome := fmt.Sprintf("goconserver(robot): Hello %s, welcome to the session of %s\r\n", conn.RemoteAddr().String(), c.node.StorageNode.Name)
+	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s\r\n",
+		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), c.node.StorageNode.Name)
 	err := c.network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
@@ -125,6 +126,12 @@ func (c *Console) readTarget() {
 	var n int
 	b := make([]byte, 4096)
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
+	msg := fmt.Sprintf("\nConnect to %s at %s\n\n", c.node.StorageNode.Name, time.Now().Format("2006-01-02 15:04:05"))
+	c.logger(logFile, []byte(msg))
+	if err != nil {
+		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+		return
+	}
 	for {
 		select {
 		case <-c.stop:

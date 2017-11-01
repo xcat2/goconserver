@@ -130,8 +130,9 @@ func (node *Node) startConsole() {
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
-		time.Sleep(time.Duration(5) * time.Second)
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+			serverConfig.Console.ReconnectInterval, err.Error()))
+		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 		go node.restartConsole()
 		return
 	}
@@ -139,8 +140,9 @@ func (node *Node) startConsole() {
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait 5 seconds and try again, error:%s", err.Error()))
-		time.Sleep(time.Duration(5) * time.Second)
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+			serverConfig.Console.ReconnectInterval, err.Error()))
+		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 		go node.restartConsole()
 		return
 	}
@@ -149,7 +151,7 @@ func (node *Node) startConsole() {
 	console.Start()
 	if node.StorageNode.Ondemand == false {
 		plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
-		time.Sleep(time.Duration(5) * time.Second)
+		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 		node.restartConsole()
 	}
 }

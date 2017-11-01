@@ -29,17 +29,19 @@ type ServerConfig struct {
 		HttpTimeout int    `yaml:"http_timeout"`
 	}
 	Console struct {
-		Port          string `yaml:"port"`
-		DataDir       string `yaml:"datadir"`
-		LogDir        string `yaml:"logdir"`
-		ClientTimeout int    `yaml:"client_timeout"`
-		TargetTimeout int    `yaml:"target_timeout"`
-		RPCPort       string `yaml:"rpcport"`
+		Port              string `yaml:"port"`
+		DataDir           string `yaml:"datadir"`
+		LogDir            string `yaml:"logdir"`
+		ClientTimeout     int    `yaml:"client_timeout"`
+		TargetTimeout     int    `yaml:"target_timeout"`
+		ReconnectInterval int    `yaml:"reconnect_interval"`
+		RPCPort           string `yaml:"rpcport"`
 	}
 	Etcd struct {
-		DailTimeout    int    `yaml:"dail_timeout"`
-		RequestTimeout int    `yaml:"request_timeout"`
-		Endpoints      string `yaml:"endpoints"`
+		DailTimeout     int    `yaml:"dail_timeout"`
+		RequestTimeout  int    `yaml:"request_timeout"`
+		Endpoints       string `yaml:"endpoints"`
+		ServerHeartbeat int64  `yaml:"server_heartbeat"`
 	}
 }
 
@@ -56,10 +58,12 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
+	serverConfig.Console.ReconnectInterval = 5
 	serverConfig.Console.RPCPort = "12431" // only for async storage type
 	serverConfig.Etcd.DailTimeout = 5
 	serverConfig.Etcd.RequestTimeout = 2
 	serverConfig.Etcd.Endpoints = "127.0.0.1:2379"
+	serverConfig.Etcd.ServerHeartbeat = 5
 	data, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		return serverConfig, nil

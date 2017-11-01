@@ -52,12 +52,36 @@ func (s *EtcdStorage) register() error {
 		return err
 	}
 	defer cli.Close()
-	key := fmt.Sprintf("/consoleserver/hosts/%s", s.host)
-	_, err = cli.Put(context.TODO(), key, s.host)
+	lease := clientv3.NewLease(cli)
+	resp, err := lease.Grant(context.TODO(), serverConfig.Etcd.ServerHeartbeat)
 	if err != nil {
-		plog.Error(err)
+		plog.Error(fmt.Sprintf("Could not request lease from etcd, error: %s", err))
 		return err
 	}
+	key := fmt.Sprintf("/consoleserver/hosts/%s", s.host)
+	_, err = cli.Put(context.TODO(), key, s.host, clientv3.WithLease(resp.ID))
+	if err != nil {
+		plog.Error(fmt.Sprintf("Could not update host on etcd, error: %s", err))
+		return err
+	}
+	go func() {
+		t := serverConfig.Etcd.ServerHeartbeat - 2
+		if t <= 0 {
+			t = 1
+		}
+		cli, err := s.getClient()
+		if err != nil {
+			plog.Error(err)
+		}
+		defer cli.Close()
+		for {
+			time.Sleep(time.Duration(t) * time.Second)
+			_, err = cli.KeepAliveOnce(context.TODO(), resp.ID)
+			if err != nil {
+				plog.Error(fmt.Sprintf("Could not update host on etcd, error: %s", err))
+			}
+		}
+	}()
 	return nil
 }
 

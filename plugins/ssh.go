@@ -104,7 +104,6 @@ func (s *SSHConsole) appendPasswordAuthMethod(autoMethods *[]ssh.AuthMethod) {
 	if s.password != "" {
 		*autoMethods = append(*autoMethods, ssh.Password(s.password))
 	}
-
 }
 
 func (s *SSHConsole) connectToHost() error {
