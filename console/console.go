@@ -93,7 +93,7 @@ func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer c.Disconnect(conn)
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	welcome := fmt.Sprintf("Hello %s: welcome to the session of %s\r\n", conn.RemoteAddr().String(), c.node.StorageNode.Name)
+	welcome := fmt.Sprintf("goconserver(robot): Hello %s, welcome to the session of %s\r\n", conn.RemoteAddr().String(), c.node.StorageNode.Name)
 	err := c.network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))

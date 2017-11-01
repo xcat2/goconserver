@@ -225,7 +225,8 @@ type CongoClient struct {
 func NewCongoClient(baseUrl string) *CongoClient {
 	baseUrl = strings.TrimSuffix(baseUrl, "/")
 	clientConfig := common.GetClientConfig()
-	client := &common.HttpClient{Client: http.DefaultClient, Headers: http.Header{}}
+	httpClient := http.Client{Timeout: time.Second * 5}
+	client := &common.HttpClient{Client: &httpClient, Headers: http.Header{}}
 	if strings.HasPrefix(baseUrl, "https") && clientConfig.SSLKeyFile != "" &&
 		clientConfig.SSLCertFile != "" && clientConfig.SSLCACertFile != "" {
 		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile,

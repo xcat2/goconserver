@@ -51,13 +51,13 @@ func (s *EtcdStorage) register() error {
 	if err != nil {
 		return err
 	}
+	defer cli.Close()
 	key := fmt.Sprintf("/consoleserver/hosts/%s", s.host)
 	_, err = cli.Put(context.TODO(), key, s.host)
 	if err != nil {
 		plog.Error(err)
 		return err
 	}
-	defer cli.Close()
 	return nil
 }
 
@@ -167,6 +167,7 @@ func (s *EtcdStorage) ListNodeWithHost() map[string]string {
 		plog.Error(err)
 		return nil
 	}
+	defer cli.Close()
 	hosts, err := s.getHosts(cli)
 	if err != nil {
 		plog.Error(err)
