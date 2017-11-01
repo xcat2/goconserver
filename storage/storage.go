@@ -38,7 +38,7 @@ type StorInterface interface {
 	GetNodes() map[string]*Node
 	NotifyPersist(interface{}, int)
 	SupportWatcher() bool
-	ListNodeWithHost() map[string]string
+	ListNodeWithHost() map[string]string // key node name, value host
 }
 
 func NewStorage(storType string) (StorInterface, error) {

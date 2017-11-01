@@ -4,6 +4,7 @@ package consolepb;
 
 service ConsoleManager {
   rpc ShowNode (NodeName) returns (Node) {};
+  rpc SetConsoleState (NodesState) returns (Result) {};
 }
 
 message NodeName {
@@ -16,4 +17,13 @@ message Node {
   map<string, string> params = 3;
   bool ondemand = 4;
   int32 status = 5;
+}
+
+message NodesState {
+  repeated string names = 1;
+  string state = 2;
+}
+
+message Result {
+  map<string, string> result = 1;
 }

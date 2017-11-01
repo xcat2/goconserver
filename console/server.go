@@ -1,7 +1,6 @@
 package console
 
 import (
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -10,9 +9,7 @@ import (
 	pb "github.com/chenglch/consoleserver/console/consolepb"
 	"github.com/chenglch/consoleserver/plugins"
 	"github.com/chenglch/consoleserver/storage"
-	net_context "golang.org/x/net/context"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+
 	"net"
 	"net/http"
 	"os"
@@ -524,7 +521,7 @@ func (m *NodeManager) ShowNode(name string) (*Node, int, error) {
 	return node, http.StatusOK, nil
 }
 
-func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
+func (m *NodeManager) setConsoleState(nodes []string, state string) map[string]string {
 	result := make(map[string]string)
 	for _, v := range nodes {
 		if v == "" {
@@ -533,7 +530,7 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 		}
 		m.RWlock.Lock()
 		if !m.Exists(v) {
-			msg := "Skip this node as node is not exist."
+			msg := "Skip this node as it is not exist."
 			plog.ErrorNode(v, msg)
 			result[v] = msg
 			m.RWlock.Unlock()
@@ -547,6 +544,37 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 			node.StopConsole()
 		}
 		result[v] = "Updated"
+	}
+	return result
+}
+
+func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
+	var host, node string
+	var nodeList []string
+	if !m.stor.SupportWatcher() {
+		return m.setConsoleState(nodes, state)
+	}
+	nodeWithHost := nodeManager.stor.ListNodeWithHost()
+	hostNodes := make(map[string][]string, 0)
+	for _, node = range nodes {
+		if _, ok := nodeWithHost[node]; !ok {
+			plog.ErrorNode(node, "Skip this node as it is not exit.")
+			continue
+		}
+		host = nodeWithHost[node]
+		//if hostNodes[]
+		hostNodes[host] = append(hostNodes[host], node)
+	}
+	result := make(map[string]string)
+	for host, nodeList = range hostNodes {
+		cRPCClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
+		hostResult, err := cRPCClient.SetConsoleState(nodeList, state)
+		if err != nil {
+			continue
+		}
+		for k, v := range hostResult {
+			result[k] = v
+		}
 	}
 	return result
 }
@@ -752,96 +780,4 @@ func (m *NodeManager) PersistWatcher() {
 			}
 		}
 	}
-}
-
-type ConsoleRPCServer struct {
-	port   string
-	host   string
-	server *grpc.Server
-}
-
-func newConsoleRPCServer() *ConsoleRPCServer {
-	return &ConsoleRPCServer{port: serverConfig.Console.RPCPort, host: serverConfig.Global.Host}
-}
-
-func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
-	nodeManager.RWlock.RLock()
-	if !nodeManager.Exists(rpcNode.Name) {
-		nodeManager.RWlock.RUnlock()
-		return nil, errors.New(fmt.Sprintf("Could not find node %s on %s", rpcNode.Name, serverConfig.Global.Host))
-	}
-	node := nodeManager.Nodes[rpcNode.Name]
-	retNode := pb.Node{Name: node.StorageNode.Name,
-		Driver:   node.StorageNode.Driver,
-		Params:   node.StorageNode.Params,
-		Ondemand: node.StorageNode.Ondemand,
-		Status:   int32(node.status)}
-	nodeManager.RWlock.RUnlock()
-	return &retNode, nil
-}
-
-func (cRPCServer *ConsoleRPCServer) serve() {
-	var creds credentials.TransportCredentials
-	var err error
-	var s *grpc.Server
-	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
-		tlsConfig, err := common.LoadServerTlsConfig(serverConfig.Global.SSLCertFile,
-			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile)
-		if err != nil {
-			panic(err)
-		}
-		creds = credentials.NewTLS(tlsConfig)
-	}
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", cRPCServer.host, cRPCServer.port))
-	if err != nil {
-		panic(err)
-	}
-	if creds != nil {
-		s = grpc.NewServer(grpc.Creds(creds))
-	} else {
-		s = grpc.NewServer()
-	}
-	pb.RegisterConsoleManagerServer(s, cRPCServer)
-	plog.Debug(fmt.Sprintf("Rpc server is listening on %s:%s", cRPCServer.host, cRPCServer.port))
-	go s.Serve(lis)
-}
-
-type ConsoleRPCClient struct {
-	host string
-	port string
-}
-
-func newConsoleRPCClient(host string, port string) *ConsoleRPCClient {
-	return &ConsoleRPCClient{host: host, port: port}
-}
-
-func (cRPCClient *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
-	var creds credentials.TransportCredentials
-	var err error
-	var conn *grpc.ClientConn
-	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
-		tlsConfig, err := common.LoadClientTlsConfig(serverConfig.Global.SSLCertFile,
-			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile, cRPCClient.host)
-		if err != nil {
-			panic(err)
-		}
-		creds = credentials.NewTLS(tlsConfig)
-	}
-	addr := fmt.Sprintf("%s:%s", cRPCClient.host, cRPCClient.port)
-	if creds != nil {
-		conn, err = grpc.Dial(addr, grpc.WithTransportCredentials(creds))
-	} else {
-		conn, err = grpc.Dial(addr, grpc.WithInsecure())
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	c := pb.NewConsoleManagerClient(conn)
-	node, err := c.ShowNode(context.Background(), &pb.NodeName{Name: name})
-	if err != nil {
-		plog.Error(err)
-		return nil, err
-	}
-	return node, nil
 }

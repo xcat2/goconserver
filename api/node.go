@@ -84,10 +84,6 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	var err error
-	if !nodeManager.Exists(vars["node"]) {
-		plog.HandleHttp(w, req, http.StatusBadRequest, err)
-		return
-	}
 	if _, ok := req.URL.Query()["state"]; !ok {
 		err = errors.New("Clould not locate the state parameters from URL")
 		plog.HandleHttp(w, req, http.StatusBadRequest, err)

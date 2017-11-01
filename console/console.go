@@ -127,7 +127,7 @@ func (c *Console) readTarget() {
 	b := make([]byte, 4096)
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
 	msg := fmt.Sprintf("\nConnect to %s at %s\n\n", c.node.StorageNode.Name, time.Now().Format("2006-01-02 15:04:05"))
-	c.logger(logFile, []byte(msg))
+	err = c.logger(logFile, []byte(msg))
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
 		return
