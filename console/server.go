@@ -601,7 +601,7 @@ func (m *NodeManager) PostNode(storNode *storage.Node) (int, error) {
 		}
 	} else {
 		storNodes := make(map[string][]storage.Node)
-		storNodes["nodes"] = make([]storage.Node, 0)
+		storNodes["nodes"] = make([]storage.Node, 0, 1)
 		storNodes["nodes"] = append(storNodes["nodes"], *storNode)
 		m.NotifyPersist(storNodes, common.ACTION_PUT)
 	}
@@ -685,7 +685,7 @@ func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
 		nodeManager.RWlock.Unlock()
 		nodeManager.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
-		names := make([]string, 0)
+		names := make([]string, 0, 1)
 		names = append(names, nodeName)
 		m.NotifyPersist(names, common.ACTION_DELETE)
 	}
@@ -767,12 +767,12 @@ func (m *NodeManager) PersistWatcher() {
 					plog.Error(err)
 					return
 				}
-				storNodes := make([]storage.Node, 0)
+				storNodes := make([]storage.Node, 0, 1)
 				storNodes = append(storNodes, *storNode)
 				m.postNodes(storNodes, nil)
 			} else if _, ok := eventMap[common.ACTION_DELETE]; ok {
 				name := string(eventMap[common.ACTION_DELETE])
-				names := make([]string, 0)
+				names := make([]string, 0, 1)
 				names = append(names, name)
 				m.deleteNodes(names, nil)
 			} else {

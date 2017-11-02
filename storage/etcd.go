@@ -95,7 +95,7 @@ func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	hosts := make([]string, 0)
+	hosts := make([]string, 0, len(resp.Kvs))
 	for _, v := range resp.Kvs {
 		hosts = append(hosts, string(v.Value))
 	}

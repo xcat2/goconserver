@@ -42,7 +42,7 @@ func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeNam
 func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae *pb.NodesState) (*pb.Result, error) {
 	plog.Debug("Receive the RPC call SetConsoleState")
 	nodeManager.RWlock.RLock()
-	names := make([]string, 0)
+	names := make([]string, 0, len(pbNodesStae.Names))
 	for _, name := range pbNodesStae.Names {
 		if !nodeManager.Exists(name) {
 			plog.ErrorNode(name, fmt.Sprintf("Could not find node on %s", serverConfig.Global.Host))

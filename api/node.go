@@ -90,7 +90,7 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	state := req.URL.Query()["state"][0]
-	nodes := make([]string, 0)
+	nodes := make([]string, 0, 1)
 	nodes = append(nodes, vars["node"])
 	nodeManager.SetConsoleState(nodes, state)
 	plog.InfoNode(vars["node"], fmt.Sprintf("The console state has been changed to %s.", state))
@@ -123,7 +123,7 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	nodes := make([]string, len(storNodes["nodes"]))
+	nodes := make([]string, 0, len(storNodes["nodes"]))
 	for _, v := range storNodes["nodes"] {
 		nodes = append(nodes, v.Name)
 	}
@@ -226,7 +226,7 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
 		return
 	}
-	names := make([]string, len(nodes["nodes"]))
+	names := make([]string, 0, len(nodes["nodes"]))
 	for _, node := range nodes["nodes"] {
 		names = append(names, node.Name)
 	}
