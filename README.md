@@ -1,18 +1,18 @@
-## consoleserver
+## goconserver
 
-`consoleserver` is written in golang and is a part of microservice of
+`goconserver` is written in golang and is a part of microservice of
 [xcat3](https://github.com/chenglch/xcat3). It can work as a independent
 tool to provide the terminal session service. Terminal session could run in
 the background and help logging the terminal content.
 
 ### Support plugin
-`consoleserver` intent to support multiple types of terminal plugins, currently
+`goconserver` intent to support multiple types of terminal plugins, currently
 `ssh` is support as OpenBMC use `ssh` as the SOL method and `cmd` is a general
 driver to support command session.
 
 ### Structure
-`consoleserver` can be divided into two parts:
-- daemon part: `consoleserver`, expose rest api interface to define and control
+`goconserver` can be divided into two parts:
+- daemon part: `goconserver`, expose rest api interface to define and control
   the session node.
 
 - client part: `congo`, a command line tool to define session or connect to the
@@ -28,8 +28,8 @@ Please setup golang SDK, GOPATH environment variable and glide tool at first.
 ### Build and installation
 
 ```
-git clone https://github.com/chenglch/consoleserver.git
-cd consoleserver
+git clone https://github.com/chenglch/goconserver.git
+cd goconserver
 make install
 ```
 
@@ -43,7 +43,7 @@ Please refer to [ssl](/scripts/ssl/)
 daemon is running in the background. To support a large amount of sessions,
 please use `ulimit -n <number>` command to set the number of open files.
 ```
-consoleserver &
+goconserver &
 ```
 ### Define testnode node session
 congo is the client command. Use congo help to see the detail.

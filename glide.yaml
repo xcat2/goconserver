@@ -1,6 +1,6 @@
 package: .
 import:
-- package: github.com/chenglch/consoleserver
+- package: github.com/chenglch/goconserver
   subpackages:
   - api
   - common

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/chenglch/consoleserver/console"
+	"github.com/chenglch/goconserver/console"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ func version(cmd *cobra.Command, args []string) {
 func main() {
 	cmd := &cobra.Command{
 		Use:   "congo",
-		Short: "This is golang client for consoleserver",
+		Short: "This is golang client for goconserver",
 		Long: `Congo --help and congo help COMMAND to see the usage for specfied
 	command.`}
 	cmd.AddCommand(versionCommand())

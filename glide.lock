@@ -1,7 +1,7 @@
 hash: db426c3cdcf02d9cbfcc7ab8d02a355abffcdde5d8dd44042b893845e31d748a
 updated: 2017-10-24T11:20:58.017934428-04:00
 imports:
-- name: github.com/chenglch/consoleserver
+- name: github.com/chenglch/goconserver
   version: d42c6d90502c322d6bf9dd9e8a267d59ab5107e5
   subpackages:
   - api

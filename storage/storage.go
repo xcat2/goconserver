@@ -3,12 +3,12 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 )
 
 var (
 	serverConfig     = common.GetServerConfig()
-	plog             = common.GetLogger("github.com/chenglch/consoleserver/storage")
+	plog             = common.GetLogger("github.com/chenglch/goconserver/storage")
 	STORAGE_INIT_MAP = map[string]func() StorInterface{}
 )
 

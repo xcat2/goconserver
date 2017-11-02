@@ -12,5 +12,5 @@
 autogen/
 .idea/
 vendor/
-consoleserver
+goconserver
 congo

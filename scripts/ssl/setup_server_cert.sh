@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z "$CONSOLESERVER_DIR" ]; then
-  CONSOLESERVER_DIR=/etc/consoleserver
+  CONSOLESERVER_DIR=/etc/goconserver
 fi
 if [ -z "$1" ]; then
   echo "Usage: $0 servername"

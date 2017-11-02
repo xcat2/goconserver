@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
-	pb "github.com/chenglch/consoleserver/console/consolepb"
-	"github.com/chenglch/consoleserver/plugins"
-	"github.com/chenglch/consoleserver/storage"
+	"github.com/chenglch/goconserver/common"
+	pb "github.com/chenglch/goconserver/console/consolepb"
+	"github.com/chenglch/goconserver/plugins"
+	"github.com/chenglch/goconserver/storage"
 
 	"net"
 	"net/http"
@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	plog         = common.GetLogger("github.com/chenglch/consoleserver/service")
+	plog         = common.GetLogger("github.com/chenglch/goconserver/service")
 	nodeManager  *NodeManager
 	serverConfig = common.GetServerConfig()
 	STATUS_MAP   = map[int]string{

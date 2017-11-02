@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"crypto/tls"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
 	"io"
 	"net/http"

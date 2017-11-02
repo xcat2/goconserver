@@ -3,7 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 	"io/ioutil"
 	"path"
 	"reflect"

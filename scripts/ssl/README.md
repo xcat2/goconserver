@@ -12,9 +12,9 @@ cat /etc/consoloserver/server.conf
 ```
 global:
   host: 0.0.0.0
-  ssl_key_file: /etc/consoleserver/cert/server-key.pem
-  ssl_cert_file: /etc/consoleserver/cert/server-cert.pem
-  ssl_ca_cert_file: /etc/consoleserver/cert/ca.pem
+  ssl_key_file: /etc/goconserver/cert/server-key.pem
+  ssl_cert_file: /etc/goconserver/cert/server-cert.pem
+  ssl_ca_cert_file: /etc/goconserver/cert/ca.pem
 ```
 
 cat /etc/profile.d/congo.sh

@@ -3,7 +3,7 @@ package plugins
 import (
 	"errors"
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 	"github.com/kr/pty"
 	"os"
 	"os/exec"

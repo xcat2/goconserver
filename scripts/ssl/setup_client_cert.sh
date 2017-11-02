@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z "$CONSOLESERVER_DIR" ]; then
-  CONSOLESERVER_DIR=/etc/consoleserver
+  CONSOLESERVER_DIR=/etc/goconserver
 fi
 # if `-f`|`--force` option is supplied, set a variable and remove option from paraameters
 # This allows use of the old code without modification

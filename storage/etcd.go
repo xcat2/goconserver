@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 	"github.com/coreos/etcd/clientv3"
 	"reflect"
 	"strings"
@@ -58,7 +58,7 @@ func (s *EtcdStorage) register() error {
 		plog.Error(fmt.Sprintf("Could not request lease from etcd, error: %s", err))
 		return err
 	}
-	key := fmt.Sprintf("/consoleserver/hosts/%s", s.host)
+	key := fmt.Sprintf("/goconserver/hosts/%s", s.host)
 	_, err = cli.Put(context.TODO(), key, s.host, clientv3.WithLease(resp.ID))
 	if err != nil {
 		plog.Error(fmt.Sprintf("Could not update host on etcd, error: %s", err))
@@ -91,7 +91,7 @@ func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 		err = errors.New("Please initialize the client for etcd")
 		return nil, err
 	}
-	resp, err := cli.Get(context.TODO(), "/consoleserver/hosts", clientv3.WithPrefix())
+	resp, err := cli.Get(context.TODO(), "/goconserver/hosts", clientv3.WithPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (s *EtcdStorage) getClient() (*clientv3.Client, error) {
 }
 
 func (s *EtcdStorage) ImportNodes() {
-	dirKey := fmt.Sprintf("/consoleserver/%s/nodes", s.host)
+	dirKey := fmt.Sprintf("/goconserver/%s/nodes", s.host)
 	cli, err := s.getClient()
 	if err != nil {
 		plog.Error(err)
@@ -158,7 +158,7 @@ func (s *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error)
 	}
 	hostsCount := make(map[string]int)
 	for _, host := range hosts {
-		key := fmt.Sprintf("/consoleserver/%s/nodes/", host)
+		key := fmt.Sprintf("/goconserver/%s/nodes/", host)
 		resp, err := cli.Get(context.TODO(), key, clientv3.WithPrefix(), clientv3.WithCountOnly())
 		if err != nil {
 			plog.Error(err)
@@ -199,7 +199,7 @@ func (s *EtcdStorage) ListNodeWithHost() map[string]string {
 	}
 	hostNodes := make(map[string]string)
 	for _, host := range hosts {
-		key := fmt.Sprintf("/consoleserver/%s/nodes/", host)
+		key := fmt.Sprintf("/goconserver/%s/nodes/", host)
 		resp, err := cli.Get(context.TODO(), key, clientv3.WithPrefix())
 		if err != nil {
 			plog.Error(err)
@@ -239,7 +239,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 				plog.Error("Could not find proper host")
 				return
 			}
-			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", host, v.Name)
+			key := fmt.Sprintf("/goconserver/%s/nodes/%s", host, v.Name)
 			b, err := json.Marshal(v)
 			if err != nil {
 				plog.ErrorNode(v.Name, err)
@@ -264,7 +264,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 		}
 		defer cli.Close()
 		for _, v := range nodes.([]string) {
-			key := fmt.Sprintf("/consoleserver/%s/nodes/%s", s.host, v)
+			key := fmt.Sprintf("/goconserver/%s/nodes/%s", s.host, v)
 			_, err = cli.Delete(context.TODO(), key)
 			if err != nil {
 				plog.ErrorNode(v, err)
@@ -283,7 +283,7 @@ func (s *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
 		return
 	}
 	defer cli.Close()
-	key := fmt.Sprintf("/consoleserver/%s/nodes/", s.host)
+	key := fmt.Sprintf("/goconserver/%s/nodes/", s.host)
 	changes := cli.Watch(context.Background(), key, clientv3.WithPrefix())
 	for resp := range changes {
 		for _, ev := range resp.Events {

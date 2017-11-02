@@ -8,8 +8,8 @@ import (
 
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/chenglch/consoleserver/api"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/api"
+	"github.com/chenglch/goconserver/common"
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"io/ioutil"
@@ -29,11 +29,11 @@ var (
 
 func init() {
 	ServerCmd = &cobra.Command{
-		Use:   "consoleserver",
-		Short: "This is consoleserver damon service",
-		Long:  `Consoleserver daemon service`}
-	ServerCmd.Flags().StringVarP(&confFile, "config-file", "c", "/etc/consoleserver/server.conf", "Specify the configuration file for consoleserver daemon.")
-	ServerCmd.Flags().BoolVarP(&showVer, "version", "v", false, "Show the version of consoleserver.")
+		Use:   "goconserver",
+		Short: "This is goconserver damon service",
+		Long:  `goconserver daemon service`}
+	ServerCmd.Flags().StringVarP(&confFile, "config-file", "c", "/etc/goconserver/server.conf", "Specify the configuration file for goconserver daemon.")
+	ServerCmd.Flags().BoolVarP(&showVer, "version", "v", false, "Show the version of goconserver.")
 }
 
 func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {

@@ -54,8 +54,8 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.API.Port = "8089"
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12430"
-	serverConfig.Console.DataDir = "/var/lib/consoleserver/"
-	serverConfig.Console.LogDir = "/var/log/consoleserver/nodes/"
+	serverConfig.Console.DataDir = "/var/lib/goconserver/"
+	serverConfig.Console.LogDir = "/var/log/goconserver/nodes/"
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
 	serverConfig.Console.ReconnectInterval = 5

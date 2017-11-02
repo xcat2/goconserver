@@ -7,15 +7,15 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/console"
-	"github.com/chenglch/consoleserver/storage"
+	"github.com/chenglch/goconserver/common"
+	"github.com/chenglch/goconserver/console"
+	"github.com/chenglch/goconserver/storage"
 	"github.com/gorilla/mux"
 )
 
 var (
 	nodeManager  *console.NodeManager
-	plog         = common.GetLogger("github.com/chenglch/consoleserver/api/node")
+	plog         = common.GetLogger("github.com/chenglch/goconserver/api/node")
 	serverConfig = common.GetServerConfig()
 )
 

@@ -2,7 +2,7 @@ package console
 
 import (
 	"fmt"
-	"github.com/chenglch/consoleserver/common"
+	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
 	"net"
 	"os"
@@ -81,8 +81,8 @@ func NewCongoCli(cmd *cobra.Command) {
 func (c *CongoCli) listCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List node(s) in consoleserver service",
-		Long:  `List node(s) in consoleserver service`,
+		Short: "List node(s) in goconserver service",
+		Long:  `List node(s) in goconserver service`,
 		Run:   c.list,
 	}
 	return cmd
@@ -108,8 +108,8 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 func (c *CongoCli) showCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <node>",
-		Short: "show node detail in consoleserver service",
-		Long:  `show node detail in consoleserver service. congo show <node>`,
+		Short: "show node detail in goconserver service",
+		Long:  `show node detail in goconserver service. congo show <node>`,
 		Run:   c.show,
 	}
 	return cmd

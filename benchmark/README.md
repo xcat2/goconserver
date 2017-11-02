@@ -1,5 +1,5 @@
-## consoleserver benchmark
-This benchmark is to test the rest api performance of consoleserver. It could
+## goconserver benchmark
+This benchmark is to test the rest api performance of goconserver. It could
 be used to compare the performance of bulk interface and the normal one.
 
 ## requirements
@@ -9,7 +9,7 @@ pip install eventlet requests futurist
 ```
 
 ## run the script
-Start the consoleserver daemon at first, then run the script:
+Start the goconserver daemon at first, then run the script:
 ```
 python api.py
 ```

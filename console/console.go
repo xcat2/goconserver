@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/chenglch/consoleserver/common"
-	"github.com/chenglch/consoleserver/plugins"
+	"github.com/chenglch/goconserver/common"
+	"github.com/chenglch/goconserver/plugins"
 )
 
 const (
