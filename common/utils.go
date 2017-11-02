@@ -42,7 +42,7 @@ func init() {
 func WriteJsonFile(filepath string, data []byte) (err error) {
 	var out bytes.Buffer
 	json.Indent(&out, data, "", "\t")
-	f, err := os.Create(filepath)
+	f, err := os.OpenFile(filepath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
