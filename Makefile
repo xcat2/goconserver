@@ -41,6 +41,7 @@ install: build
 	cp ${SERVER_BINARY} /usr/local/bin/${SERVER_BINARY}
 	cp ${CLIENT_BINARY} /usr/local/bin/${CLIENT_BINARY}
 	mkdir -p /etc/goconserver /var/log/goconserver/nodes /var/lib/goconserver
+	chmod 700 /etc/goconserver /var/log/goconserver/nodes /var/lib/goconserver
         
 	if [ ! -f "/etc/goconserver/server.conf" ];  then \
 		cp etc/goconserver/server.conf /etc/goconserver/; \

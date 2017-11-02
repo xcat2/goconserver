@@ -21,6 +21,7 @@ var (
 	ServerCmd *cobra.Command
 	confFile  string
 	showVer   bool
+	help      bool
 	Version   string
 	BuildTime string
 	Commit    string
@@ -34,6 +35,7 @@ func init() {
 		Long:  `goconserver daemon service`}
 	ServerCmd.Flags().StringVarP(&confFile, "config-file", "c", "/etc/goconserver/server.conf", "Specify the configuration file for goconserver daemon.")
 	ServerCmd.Flags().BoolVarP(&showVer, "version", "v", false, "Show the version of goconserver.")
+	ServerCmd.Flags().BoolVarP(&help, "help", "h", false, "Show the help message of goconserver.")
 }
 
 func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {
@@ -59,6 +61,15 @@ func main() {
 	}
 	if showVer {
 		fmt.Printf("Version: %s, BuildTime: %s Commit: %s\n", Version, BuildTime, Commit)
+		os.Exit(0)
+	}
+	if help {
+		fmt.Printf(`Usage: goconserver [flag]
+	-c --config-file <configuration file>  Start the goconserver daemon service.
+					       If not specified, use /etc/goconserver/server.conf by default.
+	-h --help                              Show the help message.
+	-v --version                           Show the version information of the goconserver.`)
+		fmt.Println("\n")
 		os.Exit(0)
 	}
 	serverConfig, err := common.InitServerConfig(confFile)
