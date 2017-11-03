@@ -18,14 +18,40 @@ driver to support command session.
 - client part: `congo`, a command line tool to define session or connect to the
   session. Multiple client sessions could be shared.
 
-## Setup
+## Setup goconserver from release
+
+Download the tarball for release from
+[goconserver](https://github.com/chenglch/goconserver/releases), take the
+release for amd64 architecture as a example.
+```
+wget https://github.com/chenglch/goconserver/files/1437496/goconserver_linux_amd64.tar.gz
+tar xvfz goconserver_linux_amd64.tar.gz
+cd goconserver_linux_amd64
+./setup.sh
+```
+
+Modify the congiguration file `/etc/goconserver/server.conf` based on your
+environment, then run `goconserver` to start the daemon service. To support a
+large amount of sessions, please use `ulimit -n <number>` command to set the
+number of open files.
+```
+goconserver [--congi-file <file>]
+```
+
+Modify the the environment variables in `/etc/profile.d/congo.sh` based on your
+environment, then try the `congo` command.
+```
+source /etc/profile.d/congo.sh
+congo list
+```
+
+## Development
 
 ### Requirement
 
-Currently, this tool is in the development stage, there is no binary release.
 Please setup golang SDK, GOPATH environment variable and glide tool at first.
 
-### Build and installation
+### Build and install
 
 ```
 git clone https://github.com/chenglch/goconserver.git
@@ -40,8 +66,6 @@ Please refer to [ssl](/scripts/ssl/)
 ## Command Example
 
 ### Start service
-daemon is running in the background. To support a large amount of sessions,
-please use `ulimit -n <number>` command to set the number of open files.
 ```
 goconserver &
 ```
@@ -72,4 +96,5 @@ congo console testnode
 
 ## Rest API
 
-Please refer to [rest api](/api/)
+Rest api support bulk interface to manage the console sessions.
+Please refer to [rest api](/api/) for detail.
