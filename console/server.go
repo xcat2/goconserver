@@ -184,15 +184,16 @@ func (node *Node) stopConsole() {
 }
 
 // has lock
-func (node *Node) StopConsole() {
+func (node *Node) StopConsole() error {
 	if err := node.RequireLock(false); err != nil {
-		nodeManager.RWlock.Unlock()
-		return
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Unable to stop console session, error:%v", err))
+		return err
 	}
 	if node.GetStatus() == STATUS_CONNECTED {
 		node.stopConsole()
 	}
 	node.Release(false)
+	return nil
 }
 
 func (node *Node) SetStatus(status int) {
@@ -541,7 +542,9 @@ func (m *NodeManager) setConsoleState(nodes []string, state string) map[string]s
 		if state == CONSOLE_ON && node.GetStatus() != STATUS_CONNECTED {
 			node.StartConsole()
 		} else if state == CONSOLE_OFF && node.GetStatus() == STATUS_CONNECTED {
-			node.StopConsole()
+			if err := node.StopConsole(); err != nil {
+				continue
+			}
 		}
 		result[v] = "Updated"
 	}
@@ -679,7 +682,9 @@ func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
 		}
 		node := nodeManager.Nodes[nodeName]
 		if node.GetStatus() == STATUS_CONNECTED {
-			go node.StopConsole()
+			if err := node.StopConsole(); err != nil {
+				return http.StatusConflict, err
+			}
 		}
 		delete(nodeManager.Nodes, nodeName)
 		nodeManager.RWlock.Unlock()
@@ -711,7 +716,10 @@ func (m *NodeManager) deleteNodes(names []string, result map[string]string) {
 		}
 		node := nodeManager.Nodes[name]
 		if node.GetStatus() == STATUS_CONNECTED {
-			node.StopConsole()
+			if err := node.StopConsole(); err != nil {
+				nodeManager.RWlock.Unlock()
+				continue
+			}
 		}
 		delete(nodeManager.Nodes, name)
 		nodeManager.RWlock.Unlock()
