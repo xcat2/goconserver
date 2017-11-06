@@ -143,10 +143,11 @@ func (node *Node) startConsole() {
 		go node.restartConsole()
 		return
 	}
-	console := NewConsole(baseSession, node)
-	node.console = console
-	console.Start()
-	if node.StorageNode.Ondemand == false {
+	if node.console == nil {
+		node.console = NewConsole(baseSession, node)
+	}
+	node.console.Start()
+	if node.StorageNode.Ondemand == false && node.logging == true {
 		plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
 		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 		node.restartConsole()
@@ -181,6 +182,7 @@ func (node *Node) stopConsole() {
 	node.logging = false
 	node.console.Stop()
 	node.status = STATUS_AVAIABLE
+	node.console = nil
 }
 
 // has lock

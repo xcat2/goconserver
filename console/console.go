@@ -10,6 +10,7 @@ import (
 
 	"github.com/chenglch/goconserver/common"
 	"github.com/chenglch/goconserver/plugins"
+	"sync"
 )
 
 const (
@@ -22,8 +23,9 @@ type Console struct {
 	remoteIn  io.Writer
 	remoteOut io.Reader
 	session   plugins.ConsoleSession // interface for plugin
-	stop      chan bool
+	running   chan bool
 	node      *Node
+	mutex     *sync.Mutex
 }
 
 func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
@@ -33,7 +35,8 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 		node:      node,
 		network:   new(common.Network),
 		bufConn:   make(map[net.Conn]chan []byte),
-		stop:      make(chan bool, 1)}
+		running:   make(chan bool, 0),
+		mutex:     new(sync.Mutex)}
 }
 
 // Accept connection from client
@@ -45,18 +48,31 @@ func (c *Console) Accept(conn net.Conn) {
 
 // Disconnect from client
 func (c *Console) Disconnect(conn net.Conn) {
+	var bufChan chan []byte
+	var ok bool
 	conn.Close()
-	delete(c.bufConn, conn)
+	if bufChan, ok = c.bufConn[conn]; ok {
+		c.mutex.Lock()
+		if bufChan, ok = c.bufConn[conn]; ok {
+			close(bufChan)
+			delete(c.bufConn, conn)
+		}
+		c.mutex.Unlock()
+	}
 	// all of the client has been disconnected
 	if len(c.bufConn) == 0 && c.node.StorageNode.Ondemand == true {
 		c.Close()
+		c.node.console = nil
 		c.node.status = STATUS_AVAIABLE
 	}
 }
 
 func (c *Console) writeTarget(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to read message from client.")
-	defer c.Disconnect(conn)
+	defer func() {
+		plog.DebugNode(c.node.StorageNode.Name, "writeTarget goruntine quit")
+		c.Disconnect(conn)
+	}()
 	for {
 		if _, ok := c.bufConn[conn]; !ok {
 			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
@@ -91,7 +107,12 @@ func (c *Console) writeTarget(conn net.Conn) {
 
 func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
-	defer c.Disconnect(conn)
+	defer func() {
+		plog.DebugNode(c.node.StorageNode.Name, "writeClient goruntine quit")
+		c.Disconnect(conn)
+	}()
+	var bufChan chan []byte
+	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s\r\n",
 		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), c.node.StorageNode.Name)
@@ -107,11 +128,11 @@ func (c *Console) writeClient(conn net.Conn) {
 		return
 	}
 	for {
-		if _, ok := c.bufConn[conn]; !ok {
+		if bufChan, ok = c.bufConn[conn]; !ok {
 			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
-		b := <-c.bufConn[conn]
+		b := <-bufChan
 		err = c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
 			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
@@ -122,6 +143,9 @@ func (c *Console) writeClient(conn net.Conn) {
 
 func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
+	defer func() {
+		plog.DebugNode(c.node.StorageNode.Name, "readTarget goruntine quit")
+	}()
 	var err error
 	var n int
 	b := make([]byte, 4096)
@@ -134,9 +158,12 @@ func (c *Console) readTarget() {
 	}
 	for {
 		select {
-		case <-c.stop:
-			plog.InfoNode(c.node.StorageNode.Name, "Stop readTarget session.")
-			return
+		case running := <-c.running:
+			switch running {
+			case false:
+				plog.InfoNode(c.node.StorageNode.Name, "Stop readTarget session.")
+				return
+			}
 		default:
 		}
 		n, err = c.remoteOut.Read(b)
@@ -166,6 +193,7 @@ func (c *Console) Start() {
 		c.node.status = STATUS_AVAIABLE
 	}()
 	plog.DebugNode(c.node.StorageNode.Name, "Start console session.")
+	c.running = make(chan bool, 0)
 	go c.readTarget()
 	c.node.ready <- true
 	c.node.logging = true
@@ -181,10 +209,22 @@ func (c *Console) Stop() {
 // close session from rest api
 func (c *Console) Close() {
 	plog.DebugNode(c.node.StorageNode.Name, "Close console session.")
-	c.stop <- true // 1 buffer size, unblock
-	for k := range c.bufConn {
-		k.Close()
+	for k, v := range c.bufConn {
+		c.mutex.Lock()
+		if _, ok := c.bufConn[k]; ok {
+			close(v)
+		}
 		delete(c.bufConn, k)
+		c.mutex.Unlock()
+		k.Close()
+	}
+	if c.running != nil {
+		c.mutex.Lock()
+		if c.running != nil {
+			close(c.running)
+			c.running = nil
+		}
+		c.mutex.Unlock()
 	}
 	c.session.Close()
 	c.node.status = STATUS_AVAIABLE
