@@ -41,6 +41,7 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 
 // Accept connection from client
 func (c *Console) Accept(conn net.Conn) {
+	plog.DebugNode(c.node.StorageNode.Name, "Accept connection from client")
 	c.bufConn[conn] = make(chan []byte)
 	go c.writeTarget(conn)
 	go c.writeClient(conn)
@@ -62,8 +63,6 @@ func (c *Console) Disconnect(conn net.Conn) {
 	// all of the client has been disconnected
 	if len(c.bufConn) == 0 && c.node.StorageNode.Ondemand == true {
 		c.Close()
-		c.node.console = nil
-		c.node.status = STATUS_AVAIABLE
 	}
 }
 
@@ -145,6 +144,7 @@ func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
 		plog.DebugNode(c.node.StorageNode.Name, "readTarget goruntine quit")
+		c.Stop()
 	}()
 	var err error
 	var n int
@@ -214,9 +214,9 @@ func (c *Console) Close() {
 		if _, ok := c.bufConn[k]; ok {
 			close(v)
 		}
+		k.Close()
 		delete(c.bufConn, k)
 		c.mutex.Unlock()
-		k.Close()
 	}
 	if c.running != nil {
 		c.mutex.Lock()
@@ -226,8 +226,9 @@ func (c *Console) Close() {
 		}
 		c.mutex.Unlock()
 	}
-	c.session.Close()
 	c.node.status = STATUS_AVAIABLE
+	c.node.console = nil
+	c.session.Close()
 }
 
 func (c *Console) logger(path string, b []byte) error {

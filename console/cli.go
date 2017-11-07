@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
-	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -230,27 +230,34 @@ func (c *CongoCli) consoleCommand() *cobra.Command {
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
-	var conn net.Conn
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
 		os.Exit(1)
 	}
+	retry := true
 	common.NewTaskManager(100, 16)
-	client := NewConsoleClient(clientConfig.ServerHost, clientConfig.ConsolePort)
-	conn, err := client.Connect()
-	if err != nil {
-		panic(err)
-	}
-	host, err := client.Handle(conn, args[0])
-	if err == nil && host != "" {
-		client = NewConsoleClient(host, clientConfig.ConsolePort)
-		conn, err = client.Connect()
+	for retry {
+		client := NewConsoleClient(clientConfig.ServerHost, clientConfig.ConsolePort)
+		conn, err := client.Connect()
 		if err != nil {
 			panic(err)
 		}
-		_, err = client.Handle(conn, args[0])
-	}
-	if err != nil {
-		panic(err)
+		host, err := client.Handle(conn, args[0])
+		if err == nil && host != "" {
+			client = NewConsoleClient(host, clientConfig.ConsolePort)
+			conn, err = client.Connect()
+			if err != nil {
+				panic(err)
+			}
+			_, err = client.Handle(conn, args[0])
+		}
+		if err != nil {
+			fmt.Println(err)
+		}
+		if client.retry {
+			fmt.Println("Session is teminated unexpectedly, retrying....")
+			time.Sleep(time.Duration(5) * time.Second)
+		}
+		retry = client.retry
 	}
 }

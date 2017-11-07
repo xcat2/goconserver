@@ -115,13 +115,13 @@ func TimeoutChan(c chan bool, t int) error {
 	select {
 	case <-c:
 	case <-timeout:
-		return errors.New(fmt.Sprintf("Timeout happens after waiting %d seconds", t))
+		plog.Warn(fmt.Sprintf("Timeout happens after waiting %d seconds", t))
 	}
 	return nil
 }
 
 func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
-	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
+	if *reserve == TYPE_EXCLUDE_LOCK || (*reserve == TYPE_SHARE_LOCK && !share) {
 		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
 	}
 	if share == true {
@@ -137,7 +137,7 @@ func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 		}
 	}()
 	// with lock and check again
-	if *reserve == TYPE_EXCLUDE_LOCK && (*reserve == TYPE_SHARE_LOCK && !share) {
+	if *reserve == TYPE_EXCLUDE_LOCK || (*reserve == TYPE_SHARE_LOCK && !share) {
 		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
 	}
 	if share == true {

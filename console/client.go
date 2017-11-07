@@ -24,12 +24,15 @@ type ConsoleClient struct {
 	origState  *terminal.State
 	escape     int // client exit signal
 	exit       chan bool
+	retry      bool
 	inputTask  *common.Task
 	outputTask *common.Task
 }
 
 func NewConsoleClient(host string, port string) *ConsoleClient {
-	return &ConsoleClient{host: host, port: port, exit: make(chan bool, 0)}
+	return &ConsoleClient{host: host, port: port,
+		exit:  make(chan bool, 0),
+		retry: true}
 }
 
 func (c *ConsoleClient) input(args ...interface{}) {
@@ -45,8 +48,26 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	if exit == -1 {
 		b = []byte(ExitSequence)
 		n = len(b)
+		c.retry = false
 	}
 	c.SendByteWithLength(conn.(net.Conn), b[:n])
+}
+
+// console has not been connected, check the input at first
+func (c *ConsoleClient) preEscape(args interface{}) {
+	b := args.([]byte)
+	n, err := os.Stdin.Read(b)
+	if err != nil {
+		fmt.Println(err)
+		c.exit <- true
+		return
+	}
+	exit := c.checkEscape(b, n)
+	if exit == -1 {
+		b = []byte(ExitSequence)
+		n = len(b)
+		c.retry = false
+	}
 }
 
 func (c *ConsoleClient) output(args ...interface{}) {
@@ -118,6 +139,8 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 
 func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	defer conn.Close()
+	recvBuf := make([]byte, 4096)
+	sendBuf := make([]byte, 4096)
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	status, err := c.tryConnect(conn, name)
 	if status == STATUS_REDIRECT {
@@ -145,8 +168,6 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
 	c.registerSignal()
-	recvBuf := make([]byte, 4096)
-	sendBuf := make([]byte, 4096)
 	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, sendBuf)
 	if err != nil {
 		return "", err

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"sync"
 )
 
 var (
@@ -27,6 +28,7 @@ type Task struct {
 
 type TaskManager struct {
 	taskMap       map[int]*Task
+	mutex         *sync.Mutex
 	maxSize       int
 	index         int
 	total         int
@@ -54,6 +56,7 @@ func NewTaskManager(size int, taskQueueSize int) *TaskManager {
 	taskManager.taskQueueSize = taskQueueSize
 	taskManager.taskMap = make(map[int]*Task)
 	taskManager.actors = make(map[string]int)
+	taskManager.mutex = new(sync.Mutex)
 	return taskManager
 }
 
@@ -76,7 +79,9 @@ func (taskManager *TaskManager) alloc() (*Task, error) {
 		}
 	}
 	task = NewTask(taskManager.index, taskManager)
+	taskManager.mutex.Lock()
 	taskManager.taskMap[taskManager.index] = task
+	taskManager.mutex.Unlock()
 	taskManager.total++
 	return task, nil
 }
@@ -181,22 +186,26 @@ func (taskManager *TaskManager) RegisterActorWorker(actor Actor) (*Task, error) 
 }
 
 func (taskManager *TaskManager) Unregister(id int) {
+	taskManager.mutex.Lock()
 	task := taskManager.taskMap[id]
 	if task.actor != nil {
 		delete(taskManager.actors, task.actor.GetName())
 	}
 	delete(taskManager.taskMap, id)
+	taskManager.mutex.Unlock()
 	taskManager.total--
 }
 
 func (taskManager *TaskManager) Send(id int, msg interface{}) error {
 	var task *Task
 	var ok bool
+	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
 		err := errors.New(fmt.Sprintf("Could not find task for task id: %d", id))
 		return err
 	}
 	task.msg <- msg
+	taskManager.mutex.Unlock()
 	return nil
 }
 
@@ -210,10 +219,12 @@ func (taskManager *TaskManager) Running() bool {
 func (taskManager *TaskManager) Stop(id int) error {
 	var task *Task
 	var ok bool
+	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
 		err := errors.New(fmt.Sprintf("Could not find task for task id: %d", id))
 		return err
 	}
+	taskManager.mutex.Unlock()
 	task.event <- EVENT_STOP
 	return nil
 }

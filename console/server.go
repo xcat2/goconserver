@@ -117,12 +117,17 @@ func (node *Node) restartConsole() {
 		node.Release(false)
 		return
 	}
+	node.Release(false)
 }
 
 func (node *Node) startConsole() {
 	var consolePlugin plugins.ConsolePlugin
 	var err error
 	var baseSession *plugins.BaseSession
+	if node.console != nil {
+		plog.WarningNode(node.StorageNode.Name, "Console has already been started")
+		return
+	}
 	consolePlugin, err = plugins.StartConsole(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params)
 	if err != nil {
 		node.status = STATUS_ERROR
@@ -143,9 +148,7 @@ func (node *Node) startConsole() {
 		go node.restartConsole()
 		return
 	}
-	if node.console == nil {
-		node.console = NewConsole(baseSession, node)
-	}
+	node.console = NewConsole(baseSession, node)
 	node.console.Start()
 	if node.StorageNode.Ondemand == false && node.logging == true {
 		plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
@@ -256,6 +259,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		conn.(net.Conn).Close()
 		return
 	}
+	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
 	if _, ok := nodeManager.Nodes[data["name"]]; !ok {
 		defer conn.(net.Conn).Close()
 		if !nodeManager.stor.SupportWatcher() {
@@ -324,12 +328,16 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(data["name"], err)
+				conn.(net.Conn).Close()
+				return
 			}
 			node.console.Accept(conn.(net.Conn))
 		} else {
 			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(data["name"], err)
+				conn.(net.Conn).Close()
+				return
 			}
 			conn.(net.Conn).Close()
 		}
@@ -383,6 +391,7 @@ func (c *ConsoleServer) registerSignal() {
 	signalSet.Register(syscall.SIGHUP, reloadHandler)
 	signalSet.Register(syscall.SIGCHLD, ignoreHandler)
 	signalSet.Register(syscall.SIGWINCH, ignoreHandler)
+	signalSet.Register(syscall.SIGPIPE, ignoreHandler)
 	go common.DoSignal()
 }
 
