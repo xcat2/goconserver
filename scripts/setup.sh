@@ -15,3 +15,9 @@ fi;
 if [ ! -f "/etc/profile.d/congo.sh" ]; then \
 	cp $BASEPATH/etc/goconserver/client.sh /etc/profile.d/congo.sh; \
 fi
+
+if [  -d "/usr/lib/systemd/" ]; then
+    mkdir -p /usr/lib/systemd/system
+    cp $BASEPATH/etc/systemd/goconserver.service /usr/lib/systemd/system/
+    systemctl daemon-reload
+fi

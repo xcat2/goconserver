@@ -1,0 +1,11 @@
+[Unit]
+Description=goconserver
+[Service]
+LimitNOFILE=65535
+ExecStart=/usr/local/bin/goconserver
+ExecStop=/bin/kill -TERM $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
+killMode=process
+After=network.target
+[Install]
+WantedBy=multi-user.target
