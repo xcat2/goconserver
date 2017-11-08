@@ -14,7 +14,16 @@ import (
 )
 
 const (
-	ExitSequence = "\x05c." // ctrl-e, c
+	ExitSequence    = "\x05c." // ctrl-e, c
+	CLIENT_CMD_EXIT = '.'
+	CLIENT_CMD_HELP = '?'
+	// TODO(chenglch): If client command need to access the service of server,
+	// rest api could be used to implement this.
+
+)
+
+var (
+	CLIENT_CMDS = []byte{CLIENT_CMD_HELP}
 )
 
 type Console struct {

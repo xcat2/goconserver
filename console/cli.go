@@ -240,7 +240,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		client := NewConsoleClient(clientConfig.ServerHost, clientConfig.ConsolePort)
 		conn, err := client.Connect()
 		if err != nil {
-			panic(err)
+			fmt.Printf("\rCould not connect to %s\n", args[0])
 		}
 		host, err := client.Handle(conn, args[0])
 		if err == nil && host != "" {
@@ -252,11 +252,11 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 			_, err = client.Handle(conn, args[0])
 		}
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("\rThe connection is disconnected\n")
 		}
 		if client.retry {
 			fmt.Println("Session is teminated unexpectedly, retrying....")
-			time.Sleep(time.Duration(5) * time.Second)
+			time.Sleep(time.Duration(10) * time.Second)
 		}
 		retry = client.retry
 	}

@@ -44,30 +44,16 @@ func (c *ConsoleClient) input(args ...interface{}) {
 		c.exit <- true
 		return
 	}
-	exit := c.checkEscape(b, n)
-	if exit == -1 {
+	exit, pos := c.checkEscape(b, n)
+	if exit == true {
 		b = []byte(ExitSequence)
 		n = len(b)
 		c.retry = false
 	}
-	c.SendByteWithLength(conn.(net.Conn), b[:n])
-}
-
-// console has not been connected, check the input at first
-func (c *ConsoleClient) preEscape(args interface{}) {
-	b := args.([]byte)
-	n, err := os.Stdin.Read(b)
-	if err != nil {
-		fmt.Println(err)
-		c.exit <- true
+	if pos >= n {
 		return
 	}
-	exit := c.checkEscape(b, n)
-	if exit == -1 {
-		b = []byte(ExitSequence)
-		n = len(b)
-		c.retry = false
-	}
+	c.SendByteWithLength(conn.(net.Conn), b[pos:n])
 }
 
 func (c *ConsoleClient) output(args ...interface{}) {
@@ -75,43 +61,72 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	conn := args[0].([]interface{})[0].(net.Conn)
 	n, err := c.ReceiveInt(conn)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
 		c.exit <- true
 		return
 	}
 	b, err = c.ReceiveBytes(conn, n)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
 		c.exit <- true
 		return
 	}
 	n, err = os.Stdout.Write(b)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
 		c.exit <- true
 		return
 	}
 }
 
-func (c *ConsoleClient) checkEscape(b []byte, n int) int {
-	for i := 0; i < n; i++ {
-		ch := b[i]
-		if ch == '\x05' {
-			c.escape = 1
-		} else if ch == 'c' {
-			if c.escape == 1 {
-				c.escape = 2
-			}
-		} else if ch == '.' {
-			if c.escape == 2 {
-				c.exit <- true
-				return -1
-			}
-		} else {
-			c.escape = 0
+func (c *ConsoleClient) contains(cmds []byte, cmd byte) bool {
+	for _, v := range cmds {
+		if v == cmd {
+			return true
 		}
 	}
-	return 0
+	return false
+}
+
+func (c *ConsoleClient) runClientCmd(cmd byte) {
+	if cmd == CLIENT_CMD_HELP {
+		fmt.Printf("Help message from congo:\r\n" +
+			"Quit: Ctrl + E + C + .  \r\n" +
+			"Help: Ctrl + E + C + ?  \r\b" +
+			"The otherclient command is not supported temporarily.\r\n")
+	}
+}
+
+func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
+	pos := 0
+	for i := 0; i < n; i++ {
+		ch := b[i]
+		if c.escape == 0 {
+			if ch == '\x05' {
+				c.escape = 1
+				pos = i + 1
+			}
+		} else if c.escape == 1 {
+			if ch == 'c' {
+				c.escape = 2
+				pos = i + 1
+			} else {
+				c.escape = 0
+			}
+		} else if c.escape == 2 {
+			if ch == CLIENT_CMD_EXIT {
+				c.exit <- true
+				return true, 0
+			} else if c.contains(CLIENT_CMDS, ch) {
+				c.runClientCmd(ch)
+				c.escape = 0
+				pos = i + 1
+			} else {
+				c.escape = 0
+			}
+		}
+	}
+	return false, pos
 }
 
 func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
@@ -131,6 +146,9 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 	}
 	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
 	if err != nil {
+		if err == io.EOF && status == STATUS_NOTFOUND{
+			return STATUS_NOTFOUND, nil
+		}
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
 		return STATUS_ERROR, err
 	}
@@ -156,6 +174,11 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 		return string(b), nil
 	}
 	if status != STATUS_CONNECTED {
+		var err error
+		if status == STATUS_NOTFOUND {
+			fmt.Printf("Could not find node %s \n", name)
+			os.Exit(1)
+		}
 		err = errors.New(fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
 		return "", err
 	}

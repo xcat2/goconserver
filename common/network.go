@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"time"
+	"io"
 )
 
 var (
@@ -57,6 +58,10 @@ func (s *Network) ReceiveIntTimeout(conn net.Conn, timeout time.Duration) (int, 
 		}
 		tmp, err := conn.Read(b[n:])
 		if err != nil {
+			if err == io.EOF && tmp == n {
+				n += tmp
+				break
+			}
 			return 0, err
 		}
 		n += tmp

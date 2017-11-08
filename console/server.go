@@ -24,6 +24,7 @@ const (
 	STATUS_ENROLL
 	STATUS_CONNECTED
 	STATUS_ERROR
+	STATUS_NOTFOUND
 	STATUS_REDIRECT
 
 	CONSOLE_ON            = "on"
@@ -39,6 +40,7 @@ var (
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
 		STATUS_CONNECTED: "connected",
+		STATUS_NOTFOUND:  "notfound",
 		STATUS_ERROR:     "error",
 	}
 )
@@ -261,10 +263,13 @@ func (c *ConsoleServer) handle(conn interface{}) {
 	}
 	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
 	if _, ok := nodeManager.Nodes[data["name"]]; !ok {
-		defer conn.(net.Conn).Close()
+		defer func() {
+			time.Sleep(time.Duration(1) * time.Second)
+			conn.(net.Conn).Close()
+		}()
 		if !nodeManager.stor.SupportWatcher() {
 			plog.ErrorNode(data["name"], "Could not find this node.")
-			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(data["name"], err)
 			}
@@ -273,7 +278,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			nodeWithHost := nodeManager.stor.ListNodeWithHost()
 			if _, ok := nodeWithHost[data["name"]]; !ok {
 				plog.ErrorNode(data["name"], "Could not find this node.")
-				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
 				if err != nil {
 					plog.ErrorNode(data["name"], err)
 				}
@@ -320,6 +325,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 					conn.(net.Conn).Close()
 					return
 				}
+				node.Release(false)
 			}
 		}
 		if node.status == STATUS_CONNECTED {
