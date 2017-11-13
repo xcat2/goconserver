@@ -5,10 +5,10 @@ import (
 	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"sort"
 )
 
 var (
@@ -58,6 +58,7 @@ type nodeHost struct {
 	host string
 }
 type nodeHostSlice []nodeHost
+
 func (a nodeHostSlice) Len() int {
 	return len(a)
 }
@@ -123,7 +124,7 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 	tempNodes := make([]nodeHost, 0, len(nodes))
 	for _, v := range nodes {
 		node := v.(map[string]interface{})
-		tempNodes = append(tempNodes, nodeHost{name:node["name"].(string),
+		tempNodes = append(tempNodes, nodeHost{name: node["name"].(string),
 			host: node["host"].(string)})
 	}
 	sort.Sort(nodeHostSlice(tempNodes))
@@ -148,7 +149,7 @@ func (c *CongoCli) show(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo show <node> \n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
 		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
@@ -177,7 +178,7 @@ func (c *CongoCli) logging(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo logging <node> on/off \n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
 		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
@@ -208,7 +209,7 @@ func (c *CongoCli) delete(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo delete <node>\n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
 		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
@@ -239,7 +240,7 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo create <node> driver=ssh ondemand=true --param key=val,key=val\n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
 		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
@@ -277,7 +278,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
 		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}

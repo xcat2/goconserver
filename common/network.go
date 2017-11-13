@@ -42,6 +42,9 @@ func (s *Network) ReceiveInt(conn net.Conn) (int, error) {
 	for n < 4 {
 		tmp, err := conn.Read(b[n:])
 		if err != nil {
+			if err == io.EOF && tmp+n == 4 {
+				return BytesToInt(b), err
+			}
 			return 0, err
 		}
 		n += tmp
@@ -58,9 +61,8 @@ func (s *Network) ReceiveIntTimeout(conn net.Conn, timeout time.Duration) (int, 
 		}
 		tmp, err := conn.Read(b[n:])
 		if err != nil {
-			if err == io.EOF && tmp == n {
-				n += tmp
-				break
+			if err == io.EOF && tmp+n == 4 {
+				return BytesToInt(b), err
 			}
 			return 0, err
 		}

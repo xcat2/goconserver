@@ -18,7 +18,7 @@ func DoSignal() {
 		for sig := range s.GetSigMap() {
 			sigs = append(sigs, sig)
 		}
-		signal.Notify(c)
+		signal.Notify(c, sigs...)
 		sig := <-c
 		err := s.Handle(sig, nil)
 		if err != nil {

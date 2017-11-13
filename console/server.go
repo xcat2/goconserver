@@ -237,20 +237,20 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 	return &ConsoleServer{host: host, port: port}
 }
 
-func (c *ConsoleServer) handle(conn interface{}) {
-	var err error
-	plog.Debug("New client connection received.")
+func (c *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
+	var node, command string
+	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	size, err := c.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
 	if err != nil {
 		conn.(net.Conn).Close()
-		return
+		return "", ""
 	}
 	b, err := c.ReceiveBytesTimeout(conn.(net.Conn), size, clientTimeout)
 	if err != nil {
-		conn.(net.Conn).Close()
-		return
+		return "", ""
 	}
+	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
 	data := make(map[string]string)
 	if err := json.Unmarshal(b, &data); err != nil {
 		plog.Error(err)
@@ -258,55 +258,76 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		if err != nil {
 			plog.Error(err)
 		}
-		conn.(net.Conn).Close()
-		return
+		return "", ""
 	}
-	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
-	if _, ok := nodeManager.Nodes[data["name"]]; !ok {
-		defer func() {
-			time.Sleep(time.Duration(1) * time.Second)
-			conn.(net.Conn).Close()
-		}()
-		if !nodeManager.stor.SupportWatcher() {
-			plog.ErrorNode(data["name"], "Could not find this node.")
-			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
-			if err != nil {
-				plog.ErrorNode(data["name"], err)
-			}
-			return
-		} else {
-			nodeWithHost := nodeManager.stor.ListNodeWithHost()
-			if _, ok := nodeWithHost[data["name"]]; !ok {
-				plog.ErrorNode(data["name"], "Could not find this node.")
-				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
-				if err != nil {
-					plog.ErrorNode(data["name"], err)
-				}
-				return
-			}
-			host := nodeWithHost[data["name"]]
-			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
-			if err != nil {
-				plog.ErrorNode(data["name"], err)
-				return
-			}
-			err = c.SendByteWithLength(conn.(net.Conn), []byte(host))
-			if err != nil {
-				plog.ErrorNode(data["name"], err)
-				return
-			}
-			plog.InfoNode(data["name"], fmt.Sprintf("Redirect the session to %s", host))
+	if node, ok = data["name"]; !ok {
+		plog.Error("Could not get the node from client")
+		return "", ""
+	}
+	if command, ok = data["command"]; !ok {
+		plog.Error("Could not get the command from client")
+		return "", ""
+	}
+	return node, command
+}
+
+func (c *ConsoleServer) redirect(conn interface{}, node string) {
+	var err error
+	nodeWithHost := nodeManager.stor.ListNodeWithHost()
+	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
+	if _, ok := nodeWithHost[node]; !ok {
+		plog.ErrorNode(node, "Could not find this node.")
+		err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
+		if err != nil {
+			plog.ErrorNode(node, err)
 		}
 		return
 	}
-	node := nodeManager.Nodes[data["name"]]
-	if data["command"] == COMMAND_START_CONSOLE {
+	host := nodeWithHost[node]
+	err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
+	if err != nil {
+		plog.ErrorNode(node, err)
+		return
+	}
+	err = c.SendByteWithLength(conn.(net.Conn), []byte(host))
+	if err != nil {
+		plog.ErrorNode(node, err)
+		return
+	}
+	plog.InfoNode(node, fmt.Sprintf("Redirect the session to %s", host))
+}
+
+func (c *ConsoleServer) handle(conn interface{}) {
+	var err error
+	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
+	plog.Debug("New client connection received.")
+	name, command := c.getConnectionInfo(conn)
+	if name == "" && command == "" {
+		conn.(net.Conn).Close()
+		return
+	}
+	if _, ok := nodeManager.Nodes[name]; !ok {
+		defer conn.(net.Conn).Close()
+		if !nodeManager.stor.SupportWatcher() {
+			plog.ErrorNode(name, "Could not find this node.")
+			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
+			if err != nil {
+				plog.ErrorNode(name, err)
+			}
+			return
+		} else {
+			c.redirect(conn, name)
+		}
+		return
+	}
+	node := nodeManager.Nodes[name]
+	if command == COMMAND_START_CONSOLE {
 		if node.status != STATUS_CONNECTED {
 			if err = node.RequireLock(false); err != nil {
 				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 				if err != nil {
-					plog.ErrorNode(data["name"], err)
+					plog.ErrorNode(name, err)
 				}
 				conn.(net.Conn).Close()
 				return
@@ -320,7 +341,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 					node.Release(false)
 					err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 					if err != nil {
-						plog.ErrorNode(data["name"], err)
+						plog.ErrorNode(name, err)
 					}
 					conn.(net.Conn).Close()
 					return
@@ -333,7 +354,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			// reply success message to the client
 			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
 			if err != nil {
-				plog.ErrorNode(data["name"], err)
+				plog.ErrorNode(name, err)
 				conn.(net.Conn).Close()
 				return
 			}
@@ -341,7 +362,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		} else {
 			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 			if err != nil {
-				plog.ErrorNode(data["name"], err)
+				plog.ErrorNode(name, err)
 				conn.(net.Conn).Close()
 				return
 			}
@@ -395,7 +416,6 @@ func (c *ConsoleServer) registerSignal() {
 	signalSet.Register(syscall.SIGINT, exitHandler)
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, reloadHandler)
-	signalSet.Register(syscall.SIGCHLD, ignoreHandler)
 	signalSet.Register(syscall.SIGWINCH, ignoreHandler)
 	signalSet.Register(syscall.SIGPIPE, ignoreHandler)
 	go common.DoSignal()
