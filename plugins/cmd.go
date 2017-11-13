@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/kr/pty"
@@ -25,7 +24,7 @@ func init() {
 	DRIVER_INIT_MAP[DRIVER_CMD] = NewCommondConsole
 	DRIVER_VALIDATE_MAP[DRIVER_CMD] = func(name string, params map[string]string) error {
 		if _, ok := params["cmd"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Please specify the command", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter cmd", name))
 		}
 		return nil
 	}
@@ -46,7 +45,7 @@ func (c *CommondConsole) Start() (*BaseSession, error) {
 	tty := common.Tty{}
 	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		plog.WarningNode(c.node, "Could not get tty size, use 80,80 as default")
+		plog.DebugNode(c.node, "Could not get tty size, use 80,80 as default")
 		ttyHeight = 80
 		ttyWidth = 80
 	}

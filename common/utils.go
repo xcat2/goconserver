@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"math"
-	"os"
-
-	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"math"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,7 +120,7 @@ func TimeoutChan(c chan bool, t int) error {
 
 func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	if *reserve == TYPE_EXCLUDE_LOCK || (*reserve == TYPE_SHARE_LOCK && !share) {
-		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
+		return ErrLocked
 	}
 	if share == true {
 		rwlock.RLock()
@@ -138,7 +136,7 @@ func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	}()
 	// with lock and check again
 	if *reserve == TYPE_EXCLUDE_LOCK || (*reserve == TYPE_SHARE_LOCK && !share) {
-		return errors.New(fmt.Sprintf("%s: Locked, temporary unavailable"))
+		return ErrLocked
 	}
 	if share == true {
 		*reserve = TYPE_SHARE_LOCK
@@ -150,7 +148,7 @@ func RequireLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 
 func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 	if *reserve == TYPE_NO_LOCK {
-		return errors.New(fmt.Sprintf("%s: Not locked"))
+		return ErrUnlocked
 	}
 	if share == true {
 		rwlock.RLock()
@@ -165,7 +163,7 @@ func ReleaseLock(reserve *int, rwlock *sync.RWMutex, share bool) error {
 		}
 	}()
 	if *reserve == TYPE_NO_LOCK {
-		return errors.New(fmt.Sprintf("%s: Not locked"))
+		return ErrUnlocked
 	}
 	*reserve = TYPE_NO_LOCK
 	return nil

@@ -2,7 +2,6 @@ package console
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pb "github.com/chenglch/goconserver/console/consolepb"
@@ -27,7 +26,8 @@ func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeNam
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
 		nodeManager.RWlock.RUnlock()
-		return nil, errors.New(fmt.Sprintf("Could not find node %s on %s", rpcNode.Name, serverConfig.Global.Host))
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		return nil, common.ErrNodeNotExist
 	}
 	node := nodeManager.Nodes[rpcNode.Name]
 	retNode := pb.Node{Name: node.StorageNode.Name,

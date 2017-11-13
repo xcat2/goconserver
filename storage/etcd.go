@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/coreos/etcd/clientv3"
@@ -88,8 +87,7 @@ func (s *EtcdStorage) register() error {
 func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 	var err error
 	if cli == nil {
-		err = errors.New("Please initialize the client for etcd")
-		return nil, err
+		return nil, common.ErrETCDNotInit
 	}
 	resp, err := cli.Get(context.TODO(), "/goconserver/hosts", clientv3.WithPrefix())
 	if err != nil {
@@ -134,11 +132,11 @@ func (s *EtcdStorage) ImportNodes() {
 			continue
 		}
 		if node.Name == "" {
-			plog.Error(errors.New("Skip this record as node name is not defined"))
+			plog.Error("Skip this record as node name is not defined")
 			continue
 		}
 		if node.Driver == "" {
-			plog.Error(errors.New("Driver is not defined"))
+			plog.ErrorNode(node.Name, "Driver is not defined")
 			continue
 		}
 		s.Storage.Nodes[node.Name] = node
@@ -148,8 +146,7 @@ func (s *EtcdStorage) ImportNodes() {
 func (s *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error) {
 	var err error
 	if cli == nil {
-		err = errors.New("Please initialize the client for etcd")
-		return nil, err
+		return nil, common.ErrETCDNotInit
 	}
 	hosts, err := s.getHosts(cli)
 	if err != nil {
@@ -219,8 +216,7 @@ func (s *EtcdStorage) ListNodeWithHost() map[string]string {
 func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 	if action == common.ACTION_PUT {
 		if reflect.TypeOf(nodes).Kind() != reflect.Map {
-			err := errors.New("The persistance format is not Map, ignore.")
-			plog.Error(err)
+			plog.Error("The persistance format is not Map, ignore.")
 		}
 		cli, err := s.getClient()
 		if err != nil {
@@ -254,8 +250,7 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 		}
 	} else if action == common.ACTION_DELETE {
 		if reflect.TypeOf(nodes).Kind() != reflect.Slice {
-			err := errors.New("The persistance format is not Slice, ignore.")
-			plog.Error(err)
+			plog.Error("The persistance format is not Slice, ignore.")
 		}
 		cli, err := s.getClient()
 		if err != nil {

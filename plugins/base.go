@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"io"
@@ -44,5 +43,6 @@ func Validate(driver string, name string, params map[string]string) error {
 	if fc, ok := DRIVER_VALIDATE_MAP[driver]; ok {
 		return fc(name, params)
 	}
-	return errors.New(fmt.Sprintf("%s: Could not find %s driver", name, driver))
+	plog.ErrorNode(name, fmt.Sprintf("Could not find driver %s", driver))
+	return common.ErrDriverNotExist
 }

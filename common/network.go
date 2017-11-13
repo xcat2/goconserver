@@ -4,10 +4,10 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"io/ioutil"
 	"net"
 	"time"
-	"io"
 )
 
 var (

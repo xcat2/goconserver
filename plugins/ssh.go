@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -20,15 +19,15 @@ func init() {
 	DRIVER_INIT_MAP[DRIVER_SSH] = NewSSHConsole
 	DRIVER_VALIDATE_MAP[DRIVER_SSH] = func(name string, params map[string]string) error {
 		if _, ok := params["host"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Parameter host is not defined", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter host", name))
 		}
 		if _, ok := params["user"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Parameter user is not defined", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter user", name))
 		}
 		_, ok1 := params["password"]
 		_, ok2 := params["private_key"]
 		if !ok1 && !ok2 {
-			return errors.New(fmt.Sprintf("node %s: At least one of the parameter within private_key and password should be specified", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter private_key or password", name))
 		}
 		return nil
 	}
@@ -48,7 +47,7 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 	var password, privateKey, port string
 	if _, ok := params["host"]; !ok {
 		plog.ErrorNode(node, "host parameter is not defined")
-		return nil, errors.New("host parameter is not defined")
+		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter host", node))
 	}
 	host := params["host"]
 	if _, ok := params["port"]; !ok {
@@ -58,7 +57,7 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 	}
 	if _, ok := params["user"]; !ok {
 		plog.ErrorNode(node, "user parameter is not defined")
-		return nil, errors.New("user parameter is not defined")
+		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter user", node))
 	}
 	user := params["user"]
 	if _, ok := params["password"]; ok {
@@ -69,7 +68,7 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 	}
 	if privateKey == "" && password == "" {
 		plog.ErrorNode(node, "private_key and password, at least one of the parameter should be specified")
-		return nil, errors.New("private_key and password, at least one of the parameter should be specified")
+		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter password or private_key", node))
 	}
 
 	var sshInst *SSHConsole
@@ -78,7 +77,7 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 	} else if password != "" {
 		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, password: password, node: node}
 	} else {
-		return nil, errors.New("Please specify the password or private key")
+		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter password or private_key", node))
 	}
 	return sshInst, nil
 }
@@ -134,7 +133,7 @@ func (s *SSHConsole) startConsole() (*BaseSession, error) {
 	tty := common.Tty{}
 	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		plog.WarningNode(s.node, "Could not get tty size, use 80,80 as default")
+		plog.DebugNode(s.node, "Could not get tty size, use 80,80 as default")
 		ttyHeight = 80
 		ttyWidth = 80
 	}

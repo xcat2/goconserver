@@ -3,7 +3,6 @@ package console
 import (
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pb "github.com/chenglch/goconserver/console/consolepb"
@@ -87,7 +86,8 @@ func (node *Node) Init() {
 
 func (node *Node) Validate() error {
 	if _, ok := plugins.DRIVER_VALIDATE_MAP[node.StorageNode.Driver]; !ok {
-		return errors.New(fmt.Sprintf("Could find driver %s in the supported dictionary", node.StorageNode.Driver))
+		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Coud not support driver %s", node.StorageNode.Driver))
+		return common.ErrDriverNotExist
 	}
 	if err := plugins.Validate(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params); err != nil {
 		return err
@@ -505,38 +505,34 @@ func (m *NodeManager) ListNode() map[string][]map[string]string {
 	return nodes
 }
 
-func (m *NodeManager) ShowNode(name string) (*Node, int, error) {
-	var err error
+func (m *NodeManager) ShowNode(name string) (*Node, int, string) {
 	var node *Node
 	if !m.stor.SupportWatcher() {
 		if !nodeManager.Exists(name) {
-			err = errors.New(fmt.Sprintf("The node %s is not exist.", name))
-			return nil, http.StatusBadRequest, err
+			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
 		node = nodeManager.Nodes[name]
 		if err := node.RequireLock(true); err != nil {
-			return nil, http.StatusConflict, err
+			return nil, http.StatusConflict, err.Error()
 		}
 		node.State = STATUS_MAP[node.GetStatus()]
 		node.Release(true)
 	} else {
 		nodeWithHost := m.stor.ListNodeWithHost()
 		if nodeWithHost == nil {
-			err = errors.New("Could not get host information, please check the storage connection")
-			return nil, http.StatusInternalServerError, err
+			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
 		if _, ok := nodeWithHost[name]; !ok {
-			err = errors.New(fmt.Sprintf("Could not get host information for node %s", name))
-			return nil, http.StatusBadRequest, err
+			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
 		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
 		pbNode, err := cRPCClient.ShowNode(name)
 		if err != nil {
-			return nil, http.StatusInternalServerError, err
+			return nil, http.StatusInternalServerError, err.Error()
 		}
 		node = NewNodeFrom(pbNode)
 	}
-	return node, http.StatusOK, nil
+	return node, http.StatusOK, ""
 }
 
 func (m *NodeManager) setConsoleState(nodes []string, state string) map[string]string {
@@ -599,17 +595,16 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 	return result
 }
 
-func (m *NodeManager) PostNode(storNode *storage.Node) (int, error) {
+func (m *NodeManager) PostNode(storNode *storage.Node) (int, string) {
 	if !m.stor.SupportWatcher() {
 		node := NewNode(storNode)
 		if err := node.Validate(); err != nil {
-			return http.StatusBadRequest, err
+			return http.StatusBadRequest, err.Error()
 		}
 		m.RWlock.Lock()
 		if m.Exists(node.StorageNode.Name) {
-			err := errors.New(fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name))
 			m.RWlock.Unlock()
-			return http.StatusAlreadyReported, err
+			return http.StatusConflict, fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name)
 		}
 		node.SetStatus(STATUS_ENROLL)
 		m.Nodes[node.StorageNode.Name] = node
@@ -625,7 +620,7 @@ func (m *NodeManager) PostNode(storNode *storage.Node) (int, error) {
 		storNodes["nodes"] = append(storNodes["nodes"], *storNode)
 		m.NotifyPersist(storNodes, common.ACTION_PUT)
 	}
-	return http.StatusAccepted, nil
+	return http.StatusAccepted, ""
 }
 
 func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]string) {
@@ -646,12 +641,10 @@ func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]stri
 		temp := v // the slice in go is a little tricky, use temporary variable to store the value
 		node := NewNode(&temp)
 		if err := node.Validate(); err != nil {
-			msg := "Failed to validate the node property."
-			plog.ErrorNode(node.StorageNode.Name, msg)
+			plog.ErrorNode(node.StorageNode.Name, err.Error())
 			if result != nil {
-				result[node.StorageNode.Name] = msg
+				result[node.StorageNode.Name] = err.Error()
 			}
-
 			continue
 		}
 		m.RWlock.Lock()
@@ -690,17 +683,17 @@ func (m *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]
 	return result
 }
 
-func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
+func (m *NodeManager) DeleteNode(nodeName string) (int, string) {
 	if !m.stor.SupportWatcher() {
 		nodeManager.RWlock.Lock()
 		if !nodeManager.Exists(nodeName) {
 			nodeManager.RWlock.Unlock()
-			return http.StatusBadRequest, errors.New(fmt.Sprintf("Node %s is not exist", nodeName))
+			return http.StatusBadRequest, fmt.Sprintf("Node %s is not exist", nodeName)
 		}
 		node := nodeManager.Nodes[nodeName]
 		if node.GetStatus() == STATUS_CONNECTED {
 			if err := node.StopConsole(); err != nil {
-				return http.StatusConflict, err
+				return http.StatusConflict, err.Error()
 			}
 		}
 		delete(nodeManager.Nodes, nodeName)
@@ -711,7 +704,7 @@ func (m *NodeManager) DeleteNode(nodeName string) (int, error) {
 		names = append(names, nodeName)
 		m.NotifyPersist(names, common.ACTION_DELETE)
 	}
-	return http.StatusAccepted, nil
+	return http.StatusAccepted, ""
 }
 
 func (m *NodeManager) deleteNodes(names []string, result map[string]string) {

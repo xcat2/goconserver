@@ -1,7 +1,6 @@
 package common
 
 import (
-	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -68,7 +67,7 @@ func (taskManager *TaskManager) alloc() (*Task, error) {
 	var task *Task
 	var ok bool
 	if taskManager.total == taskManager.maxSize {
-		return nil, errors.New("The count of grountines exceed the maximum quota")
+		return nil, ErrOutOfQuota
 	}
 	if taskManager.index == taskManager.maxSize {
 		taskManager.index = 0
@@ -201,8 +200,8 @@ func (taskManager *TaskManager) Send(id int, msg interface{}) error {
 	var ok bool
 	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
-		err := errors.New(fmt.Sprintf("Could not find task for task id: %d", id))
-		return err
+		plog.Error(fmt.Sprintf("Could not find task for task id: %d", id))
+		return ErrTaskNotExist
 	}
 	task.msg <- msg
 	taskManager.mutex.Unlock()
@@ -221,8 +220,8 @@ func (taskManager *TaskManager) Stop(id int) error {
 	var ok bool
 	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
-		err := errors.New(fmt.Sprintf("Could not find task for task id: %d", id))
-		return err
+		plog.Error(fmt.Sprintf("Could not find task for task id: %d", id))
+		return ErrTaskNotExist
 	}
 	taskManager.mutex.Unlock()
 	task.event <- EVENT_STOP

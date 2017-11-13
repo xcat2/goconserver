@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh"
@@ -16,18 +15,18 @@ func init() {
 	DRIVER_INIT_MAP[DRIVER_SSHCMD] = NewSSHCMDConsole
 	DRIVER_VALIDATE_MAP[DRIVER_SSHCMD] = func(name string, params map[string]string) error {
 		if _, ok := params["host"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Parameter host is not defined", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter host", name))
 		}
 		if _, ok := params["user"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Parameter user is not defined", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter user", name))
 		}
 		_, ok1 := params["password"]
 		_, ok2 := params["private_key"]
 		if !ok1 && !ok2 {
-			return errors.New(fmt.Sprintf("node %s: At least one of the parameter within private_key and password should be specified", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter private_key or password", name))
 		}
 		if _, ok := params["cmd"]; !ok {
-			return errors.New(fmt.Sprintf("node %s: Parameter cmd is not defined", name))
+			return common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter cmd", name))
 		}
 		return nil
 	}
@@ -53,7 +52,7 @@ func (s *SSHCMDConsole) startConsole() (*BaseSession, error) {
 	tty := common.Tty{}
 	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		plog.WarningNode(s.node, "Could not get tty size, use 80,80 as default")
+		plog.DebugNode(s.node, "Could not get tty size, use 80,80 as default")
 		ttyHeight = 80
 		ttyWidth = 80
 	}

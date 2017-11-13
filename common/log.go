@@ -90,11 +90,11 @@ func (l *Logger) fileinfo() log.Fields {
 	return log.Fields{"file": fmt.Sprintf("%s/%s (%d)", l.pkg, file, line)}
 }
 
-func (l *Logger) HandleHttp(w http.ResponseWriter, req *http.Request, code int, err error) {
+func (l *Logger) HandleHttp(w http.ResponseWriter, req *http.Request, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	l.plog.WithFields(log.Fields{"code": code, "method": req.Method, "uri": req.Method})
-	if err != nil {
-		l.plog.WithFields(l.fileinfo()).Error(err.Error())
+	if msg != "" {
+		l.plog.WithFields(l.fileinfo()).Error(msg)
 		w.WriteHeader(code)
 	} else {
 		l.plog.WithFields(l.fileinfo()).Info("OK")

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 )
@@ -43,7 +42,7 @@ type StorInterface interface {
 
 func NewStorage(storType string) (StorInterface, error) {
 	if _, ok := STORAGE_INIT_MAP[storType]; !ok {
-		return nil, errors.New(fmt.Sprintf("The storage type %s is not exist", storType))
+		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("The storage type %s is not exist", storType))
 	}
 	return STORAGE_INIT_MAP[storType](), nil
 }

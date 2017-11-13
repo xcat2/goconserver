@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -55,25 +54,25 @@ func (api *NodeApi) list(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	nodes := nodeManager.ListNode()
 	if resp, err = json.Marshal(nodes); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	fmt.Fprintf(w, "%s\n", resp)
 }
 
 func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
+	var err error
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
 	var resp []byte
-	node, httpcode, err := nodeManager.ShowNode(vars["node"])
-	if err != nil {
-		plog.HandleHttp(w, req, httpcode, err)
+	node, httpcode, msg := nodeManager.ShowNode(vars["node"])
+	if httpcode >= 400 {
+		plog.HandleHttp(w, req, httpcode, msg)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
 	if resp, err = json.Marshal(node); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -83,10 +82,8 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
-	var err error
 	if _, ok := req.URL.Query()["state"]; !ok {
-		err = errors.New("Clould not locate the state parameters from URL")
-		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		plog.HandleHttp(w, req, http.StatusBadRequest, "Could not get state parameter")
 		return
 	}
 	state := req.URL.Query()["state"][0]
@@ -104,23 +101,22 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 	var err error
 	var resp []byte
 	if _, ok := req.URL.Query()["state"]; !ok {
-		err = errors.New("Clould not locate the state parameters from URL")
-		plog.HandleHttp(w, req, http.StatusBadRequest, err)
+		plog.HandleHttp(w, req, http.StatusBadRequest, "Could not get state parameter")
 		return
 	}
 	state := req.URL.Query()["state"][0]
 	storNodes := make(map[string][]storage.Node, 0)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := req.Body.Close(); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := json.Unmarshal(body, &storNodes); err != nil {
-		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	nodes := make([]string, 0, len(storNodes["nodes"]))
@@ -130,7 +126,7 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 	result := nodeManager.SetConsoleState(nodes, state)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
@@ -142,28 +138,28 @@ func (api *NodeApi) post(w http.ResponseWriter, req *http.Request) {
 	node := storage.NewNode()
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := req.Body.Close(); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := json.Unmarshal(body, node); err != nil {
-		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	if node.Name == "" {
-		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New("Skip this record as node name is not defined"))
+		plog.HandleHttp(w, req, http.StatusBadRequest, "Skip this record as node name is not defined")
 		return
 	}
 	if node.Driver == "" {
-		plog.HandleHttp(w, req, http.StatusBadRequest, errors.New("Driver is not defined"))
+		plog.HandleHttp(w, req, http.StatusBadRequest, "Driver is not defined")
 		return
 	}
-	httpcode, err := nodeManager.PostNode(node)
-	if err != nil {
-		plog.HandleHttp(w, req, httpcode, err)
+	httpcode, msg := nodeManager.PostNode(node)
+	if httpcode >= 400 {
+		plog.HandleHttp(w, req, httpcode, msg)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -176,21 +172,21 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 	nodes := make(map[string][]storage.Node)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := req.Body.Close(); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := json.Unmarshal(body, &nodes); err != nil {
-		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	result := nodeManager.PostNodes(nodes)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -200,9 +196,9 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 func (api *NodeApi) delete(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
-	httpcode, err := nodeManager.DeleteNode(vars["node"])
-	if err != nil {
-		plog.HandleHttp(w, req, httpcode, err)
+	httpcode, msg := nodeManager.DeleteNode(vars["node"])
+	if httpcode >= 400 {
+		plog.HandleHttp(w, req, httpcode, msg)
 		return
 	}
 	plog.InfoNode(vars["node"], "Deteled.")
@@ -215,15 +211,15 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 	nodes := make(map[string][]storage.Node, 0)
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := req.Body.Close(); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if err := json.Unmarshal(body, &nodes); err != nil {
-		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err)
+		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	names := make([]string, 0, len(nodes["nodes"]))
@@ -233,7 +229,7 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 	result := nodeManager.DeleteNodes(names)
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
-		plog.HandleHttp(w, req, http.StatusInternalServerError, err)
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusOK)

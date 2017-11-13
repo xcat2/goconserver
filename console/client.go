@@ -1,20 +1,18 @@
 package console
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net"
-	"os"
-	"syscall"
-
 	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
 	"io"
+	"net"
 	"net/http"
 	neturl "net/url"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -146,7 +144,7 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 	}
 	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
 	if err != nil {
-		if err == io.EOF && status == STATUS_NOTFOUND{
+		if err == io.EOF && status == STATUS_NOTFOUND {
 			return STATUS_NOTFOUND, nil
 		}
 		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
@@ -174,16 +172,15 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 		return string(b), nil
 	}
 	if status != STATUS_CONNECTED {
-		var err error
 		if status == STATUS_NOTFOUND {
 			fmt.Printf("Could not find node %s \n", name)
 			os.Exit(1)
 		}
-		err = errors.New(fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
-		return "", err
+		plog.ErrorNode(name, fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
+		return "", common.ErrConnection
 	}
 	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
-		return "", errors.New("Fatal error: stdin is not terminal")
+		return "", common.ErrNotTerminal
 	}
 	c.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
@@ -292,7 +289,7 @@ func (c *CongoClient) List() ([]interface{}, error) {
 	}
 	val, ok := ret.(map[string]interface{})["nodes"].([]interface{})
 	if !ok {
-		return nodes, errors.New("The data received from server is not correct.")
+		return nodes, common.ErrInvalidType
 	}
 	return val, nil
 }
