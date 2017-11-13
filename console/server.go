@@ -512,11 +512,7 @@ func (m *NodeManager) ShowNode(name string) (*Node, int, string) {
 			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
 		node = nodeManager.Nodes[name]
-		if err := node.RequireLock(true); err != nil {
-			return nil, http.StatusConflict, err.Error()
-		}
 		node.State = STATUS_MAP[node.GetStatus()]
-		node.Release(true)
 	} else {
 		nodeWithHost := m.stor.ListNodeWithHost()
 		if nodeWithHost == nil {

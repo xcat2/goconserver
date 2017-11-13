@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"sort"
 )
 
 var (
@@ -50,6 +51,26 @@ func KeyValueToMap(value string, sep string) (map[string]interface{}, error) {
 		}
 	}
 	return m, nil
+}
+
+type nodeHost struct {
+	name string
+	host string
+}
+type nodeHostSlice []nodeHost
+func (a nodeHostSlice) Len() int {
+	return len(a)
+}
+
+func (a nodeHostSlice) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func (a nodeHostSlice) Less(i, j int) bool {
+	if strings.Compare(a[i].name, a[j].name) == -1 {
+		return true
+	}
+	return false
 }
 
 type CongoCli struct {
@@ -99,9 +120,15 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 		fmt.Printf("Could not find any record.\n")
 		os.Exit(0)
 	}
+	tempNodes := make([]nodeHost, 0, len(nodes))
 	for _, v := range nodes {
 		node := v.(map[string]interface{})
-		fmt.Printf("%s (host: %s)\n", node["name"], node["host"])
+		tempNodes = append(tempNodes, nodeHost{name:node["name"].(string),
+			host: node["host"].(string)})
+	}
+	sort.Sort(nodeHostSlice(tempNodes))
+	for _, v := range tempNodes {
+		fmt.Printf("%s (host: %s)\n", v.name, v.host)
 	}
 }
 
@@ -119,6 +146,10 @@ func (c *CongoCli) show(cmd *cobra.Command, args []string) {
 	congo := NewCongoClient(c.baseUrl)
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: congo show <node> \n")
+		os.Exit(1)
+	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
 	ret, err := congo.Show(args[0])
@@ -144,6 +175,10 @@ func (c *CongoCli) logging(cmd *cobra.Command, args []string) {
 	congo := NewCongoClient(c.baseUrl)
 	if len(args) != 2 {
 		fmt.Fprintf(os.Stderr, "Usage: congo logging <node> on/off \n")
+		os.Exit(1)
+	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
 	if args[1] != "on" && args[1] != "off" {
@@ -173,6 +208,10 @@ func (c *CongoCli) delete(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo delete <node>\n")
 		os.Exit(1)
 	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
+		os.Exit(1)
+	}
 	_, err := congo.Delete(args[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
@@ -198,6 +237,10 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 	congo := NewCongoClient(c.baseUrl)
 	if len(args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: congo create <node> driver=ssh ondemand=true --param key=val,key=val\n")
+		os.Exit(1)
+	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
 	attribs, err := KeyValueArrayToMap(args[1:], "=")
@@ -232,6 +275,10 @@ func (c *CongoCli) consoleCommand() *cobra.Command {
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
+		os.Exit(1)
+	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]){
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
 		os.Exit(1)
 	}
 	retry := true
