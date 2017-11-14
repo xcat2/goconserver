@@ -21,6 +21,7 @@ type ConsoleClient struct {
 	host, port string
 	origState  *terminal.State
 	escape     int // client exit signal
+	cr         int
 	exit       chan bool
 	retry      bool
 	inputTask  *common.Task
@@ -69,11 +70,16 @@ func (c *ConsoleClient) output(args ...interface{}) {
 		c.exit <- true
 		return
 	}
-	n, err = os.Stdout.Write(b)
-	if err != nil {
-		fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
-		c.exit <- true
-		return
+	b = c.transCr(b, n)
+	n = len(b)
+	for n > 0 {
+		tmp, err := os.Stdout.Write(b)
+		if err != nil {
+			fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
+			c.exit <- true
+			return
+		}
+		n -= tmp
 	}
 }
 
@@ -125,6 +131,45 @@ func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
 		}
 	}
 	return false, pos
+}
+
+func (c *ConsoleClient) transCr(b []byte, n int) []byte {
+	temp := make([]byte, 4096)
+	j := 0
+	for i := 0; i < n; i++ {
+		ch := b[i]
+		if c.cr == 0 {
+			if ch == ' ' {
+				c.cr = 1
+			} else {
+				temp[j] = ch
+				j++
+			}
+		} else if c.cr == 1 {
+			if ch == '\r' {
+				c.cr = 2
+			} else {
+				temp[j], temp[j+1] = ' ', ch
+				j += 2
+				c.cr = 0
+			}
+		} else if c.cr == 2 {
+			if ch == '\n' {
+				temp[j], temp[j+1], temp[j+2] = ' ', '\r', ch
+				j += 3
+			} else {
+				temp[j] = ch // ignore " \r"
+				j++
+			}
+			c.cr = 0
+		}
+	}
+	if c.cr == 1 {
+		c.cr = 0
+		temp[j] = ' '
+		j++
+	}
+	return temp[0:j]
 }
 
 func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {

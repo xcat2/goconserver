@@ -8,6 +8,7 @@ import (
 
 	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh"
+	"net"
 	"os"
 )
 
@@ -41,6 +42,7 @@ type SSHConsole struct {
 	host           string
 	client         *ssh.Client
 	session        *ssh.Session
+	exit           chan bool
 }
 
 func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error) {
@@ -73,9 +75,11 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 
 	var sshInst *SSHConsole
 	if privateKey != "" {
-		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, privateKeyFile: privateKey, node: node}
+		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user,
+			privateKeyFile: privateKey, node: node, exit: make(chan bool, 0)}
 	} else if password != "" {
-		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user, password: password, node: node}
+		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user,
+			password: password, node: node, exit: make(chan bool, 0)}
 	} else {
 		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter password or private_key", node))
 	}
@@ -105,8 +109,35 @@ func (s *SSHConsole) appendPasswordAuthMethod(autoMethods *[]ssh.AuthMethod) {
 	}
 }
 
+func (s *SSHConsole) keepSSHAlive(cl *ssh.Client, conn net.Conn) error {
+	const keepAliveInterval = time.Minute
+	t := time.NewTicker(keepAliveInterval)
+	defer t.Stop()
+	for {
+		plog.DebugNode(s.node, "Keep alive goruntine for ssh connection started")
+		deadline := time.Now().Add(keepAliveInterval).Add(15 * time.Second)
+		err := conn.SetDeadline(deadline)
+		if err != nil {
+			plog.ErrorNode(s.node, "Failed to set deadline for ssh connection")
+			return common.ErrSetDeadline
+		}
+		select {
+		case <-t.C:
+			_, _, err = cl.SendRequest("keepalive@golang.org", true, nil)
+			if err != nil {
+				plog.ErrorNode(s.node, "Faild to send keepalive request")
+				return common.ErrSendKeepalive
+			}
+		case <-s.exit:
+			plog.Debug("Exit keepalive goroutine")
+			return nil
+		}
+	}
+}
+
 func (s *SSHConsole) connectToHost() error {
 	var err error
+	timeout := 5 * time.Second
 	autoMethods := make([]ssh.AuthMethod, 0)
 	s.appendPrivateKeyAuthMethod(&autoMethods)
 	s.appendPasswordAuthMethod(&autoMethods)
@@ -114,13 +145,18 @@ func (s *SSHConsole) connectToHost() error {
 		User:            s.user,
 		Auth:            autoMethods,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * time.Second,
+		Timeout:         timeout,
 	}
-	s.client, err = ssh.Dial("tcp", s.host, sshConfig)
+	conn, err := net.DialTimeout("tcp", s.host, timeout)
 	if err != nil {
 		return err
 	}
-
+	c, chans, reqs, err := ssh.NewClientConn(conn, s.host, sshConfig)
+	if err != nil {
+		return err
+	}
+	s.client = ssh.NewClient(c, chans, reqs)
+	go s.keepSSHAlive(s.client, conn)
 	s.session, err = s.client.NewSession()
 	if err != nil {
 		s.client.Close()
@@ -180,6 +216,7 @@ func (s *SSHConsole) Start() (*BaseSession, error) {
 
 func (s *SSHConsole) Close() error {
 	if s.client != nil {
+		s.exit <- true
 		return s.client.Close()
 	}
 	return nil

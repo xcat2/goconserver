@@ -133,7 +133,6 @@ func (c *Console) writeClient(conn net.Conn) {
 	err = c.logger(logFile, []byte(welcome))
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
-		return
 	}
 	for {
 		if bufChan, ok = c.bufConn[conn]; !ok {
@@ -163,7 +162,6 @@ func (c *Console) readTarget() {
 	err = c.logger(logFile, []byte(msg))
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
-		return
 	}
 	for {
 		select {
@@ -185,15 +183,16 @@ func (c *Console) readTarget() {
 			err = c.logger(logFile, b[:n])
 			if err != nil {
 				plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
-				return
 			}
 		}
 	}
 }
 
 func (c *Console) writeClientChan(buf []byte) {
+	b := make([]byte, len(buf))
+	copy(b, buf)
 	for _, v := range c.bufConn {
-		v <- buf
+		v <- b
 	}
 }
 

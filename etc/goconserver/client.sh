@@ -1,4 +1,4 @@
-export CONGO_URL="http://127.0.0.1:8089"
+export CONGO_URL="http://127.0.0.1:12429"
 export CONGO_SERVER_HOST="127.0.0.1"
 export CONGO_PORT="12430"
 export CONGO_CONSOLE_TIMEOUT=3

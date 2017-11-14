@@ -51,7 +51,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.Worker = 1
 	serverConfig.Global.LogLevel = "info"
 	serverConfig.Global.StorageType = "file"
-	serverConfig.API.Port = "8089"
+	serverConfig.API.Port = "12429"
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
@@ -93,7 +93,7 @@ type ClientConfig struct {
 func NewClientConfig() (*ClientConfig, error) {
 	var err error
 	clientConfig = new(ClientConfig)
-	clientConfig.HTTPUrl = "http://127.0.0.1:8089"
+	clientConfig.HTTPUrl = "http://127.0.0.1:12429"
 	clientConfig.ServerHost = "127.0.0.1"
 	clientConfig.ConsolePort = "12430"
 	clientConfig.ConsoleTimeout = 30

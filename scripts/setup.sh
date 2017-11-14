@@ -5,7 +5,7 @@ set -x
 
 BASEPATH=$(cd `dirname $0`; pwd)
 
-cp $BASEPATH/goconserver $BASEPATH/congo /usr/local/bin/
+cp $BASEPATH/goconserver $BASEPATH/congo /usr/bin/
 mkdir -p /etc/goconserver /var/log/goconserver/nodes /var/lib/goconserver
 chmod 700 /etc/goconserver /var/log/goconserver/nodes /var/lib/goconserver
 

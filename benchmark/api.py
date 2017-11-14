@@ -34,7 +34,7 @@ class APItest(object):
         if 'consoleserver_host' in os.environ:
             self.host = os.environ["consoleserver_host"]
         else:
-            self.host = 'http://localhost:8089'
+            self.host = 'http://localhost:12429'
 
     @elaspe_run(desc="post")
     def test_post(self):
@@ -153,6 +153,8 @@ if __name__ == "__main__":
             api.test_bulk_post()
         elif method == 'bulk_delete':
             api.test_bulk_delete()
+        elif method == 'list':
+            api.test_list()
         else:
             print("Unsupport sub command %s." % method)
     else:

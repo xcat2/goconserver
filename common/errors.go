@@ -19,6 +19,8 @@ const (
 	HOST_NOT_EXIST
 	INVALID_TYPE
 	ETCD_NOT_INIT
+	SET_DEADLINE_ERROR
+	SEND_KEEPALIVE_ERROR
 
 	// error message
 	STRING_NOT_EXIST         = "Not exist"
@@ -39,6 +41,9 @@ const (
 	STRING_NOT_TERMINAL  = "Not terminal"
 	STRING_INVALID_TYPE  = "Invalid type"
 	STRING_ETCD_NOT_INIT = "Etcd is not initialized"
+	//ssh
+	STRING_SET_DEADLINE_ERROR   = "failed to set deadline"
+	STRING_SEND_KEEPALIVE_ERROR = "failed to send keep alive"
 )
 
 var (
@@ -59,6 +64,9 @@ var (
 
 	ErrNotTerminal = NewErr(NOT_TERMINAL, STRING_NOT_TERMINAL)
 	ErrInvalidType = NewErr(INVALID_TYPE, STRING_INVALID_TYPE)
+	// ssh
+	ErrSetDeadline   = NewErr(SET_DEADLINE_ERROR, STRING_SET_DEADLINE_ERROR)
+	ErrSendKeepalive = NewErr(SEND_KEEPALIVE_ERROR, STRING_SEND_KEEPALIVE_ERROR)
 	// etcd
 	ErrETCDNotInit = NewErr(ETCD_NOT_INIT, STRING_ETCD_NOT_INIT)
 )
