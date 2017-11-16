@@ -298,8 +298,6 @@ func (c *ConsoleClient) registerSignal() {
 	signalSet.Register(syscall.SIGINT, exitHandler)
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, exitHandler)
-	windowSizeHandler := func(s os.Signal, arg interface{}) {}
-	signalSet.Register(syscall.SIGWINCH, windowSizeHandler)
 	go common.DoSignal()
 }
 
