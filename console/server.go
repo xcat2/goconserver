@@ -402,13 +402,15 @@ func (c *ConsoleServer) Listen() {
 func (c *ConsoleServer) registerSignal() {
 	exitHandler := func(s os.Signal, arg interface{}) {
 		plog.Info(fmt.Sprintf("Handle signal: %v\n", s))
+		common.CloseLogger()
 		os.Exit(1)
 	}
 	reloadHandler := func(s os.Signal, arg interface{}) {
 		plog.Info(fmt.Sprintf("Handle signal: %v, reload configuration file\n", s))
 		if common.CONF_FILE != "" {
 			common.InitServerConfig(common.CONF_FILE)
-			common.SetLogLevel(serverConfig.Global.LogLevel)
+			common.CloseLogger()
+			common.InitLogger()
 		}
 	}
 	ignoreHandler := func(s os.Signal, arg interface{}) {}

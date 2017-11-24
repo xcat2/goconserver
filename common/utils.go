@@ -211,3 +211,16 @@ func If(condition bool, trueVal, falseVal interface{}) interface{} {
 	}
 	return falseVal
 }
+
+func SafeClose(ch chan struct{}) (justClosed bool) {
+	defer func() {
+		if recover() != nil {
+			justClosed = false
+		}
+	}()
+	if ch == nil {
+		return false
+	}
+	close(ch) // panic if ch is closed
+	return true
+}

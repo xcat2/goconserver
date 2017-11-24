@@ -18,6 +18,7 @@ type CommondConsole struct {
 	cmd     string
 	params  []string
 	command *exec.Cmd
+	pty     *os.File
 }
 
 func init() {
@@ -37,8 +38,9 @@ func NewCommondConsole(node string, params map[string]string) (ConsolePlugin, er
 }
 
 func (c *CommondConsole) Start() (*BaseSession, error) {
+	var err error
 	c.command = exec.Command(c.cmd, c.params...)
-	pty, err := pty.Start(c.command)
+	c.pty, err = pty.Start(c.command)
 	if err != nil {
 		return nil, err
 	}
@@ -49,13 +51,14 @@ func (c *CommondConsole) Start() (*BaseSession, error) {
 		ttyHeight = 80
 		ttyWidth = 80
 	}
-	if err = tty.SetSize(pty, ttyWidth, ttyHeight); err != nil {
+	if err = tty.SetSize(c.pty, ttyWidth, ttyHeight); err != nil {
 		return nil, err
 	}
-	return &BaseSession{In: pty, Out: pty, Session: c}, nil
+	return &BaseSession{In: c.pty, Out: c.pty, Session: c}, nil
 }
 
 func (c *CommondConsole) Close() error {
+	c.pty.Close()
 	return c.command.Process.Kill()
 }
 

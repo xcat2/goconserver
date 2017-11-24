@@ -29,6 +29,7 @@ var (
 		LOG_FATAL: log.FatalLevel,
 		LOG_PANIC: log.PanicLevel,
 	}
+	logFd *os.File
 )
 
 type Logger struct {
@@ -67,12 +68,19 @@ func InitLogger() {
 		log.SetOutput(os.Stderr)
 		return
 	}
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	logFd, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err == nil {
-		log.SetOutput(f)
+		log.SetOutput(logFd)
 	} else {
 		log.Info("Failed to log to file, using default stderr")
 		log.SetOutput(os.Stderr)
+	}
+}
+
+func CloseLogger() {
+	if logFd != nil {
+		logFd.Close()
+		logFd = nil
 	}
 }
 

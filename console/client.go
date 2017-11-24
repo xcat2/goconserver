@@ -22,7 +22,7 @@ type ConsoleClient struct {
 	origState  *terminal.State
 	escape     int // client exit signal
 	cr         int
-	exit       chan bool
+	exit       chan struct{}
 	retry      bool
 	inputTask  *common.Task
 	outputTask *common.Task
@@ -30,7 +30,7 @@ type ConsoleClient struct {
 
 func NewConsoleClient(host string, port string) *ConsoleClient {
 	return &ConsoleClient{host: host, port: port,
-		exit:  make(chan bool, 0),
+		exit:  make(chan struct{}, 0),
 		retry: true}
 }
 
@@ -40,7 +40,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	n, err := os.Stdin.Read(b)
 	if err != nil {
 		fmt.Println(err)
-		c.exit <- true
+		common.SafeClose(c.exit)
 		return
 	}
 	exit, pos := c.checkEscape(b, n)
@@ -60,14 +60,18 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	conn := args[0].([]interface{})[0].(net.Conn)
 	n, err := c.ReceiveInt(conn)
 	if err != nil {
-		fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
-		c.exit <- true
+		if c.retry == true {
+			fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
+		}
+		common.SafeClose(c.exit)
 		return
 	}
 	b, err = c.ReceiveBytes(conn, n)
 	if err != nil {
-		fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
-		c.exit <- true
+		if c.retry == true {
+			fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
+		}
+		common.SafeClose(c.exit)
 		return
 	}
 	b = c.transCr(b, n)
@@ -75,8 +79,10 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	for n > 0 {
 		tmp, err := os.Stdout.Write(b)
 		if err != nil {
-			fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
-			c.exit <- true
+			if c.retry == true {
+				fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
+			}
+			common.SafeClose(c.exit)
 			return
 		}
 		n -= tmp
@@ -119,7 +125,7 @@ func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
 			}
 		} else if c.escape == 2 {
 			if ch == CLIENT_CMD_EXIT {
-				c.exit <- true
+				common.SafeClose(c.exit)
 				return true, 0
 			} else if c.contains(CLIENT_CMDS, ch) {
 				c.runClientCmd(ch)

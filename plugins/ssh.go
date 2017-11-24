@@ -42,7 +42,7 @@ type SSHConsole struct {
 	host           string
 	client         *ssh.Client
 	session        *ssh.Session
-	exit           chan bool
+	exit           chan struct{}
 }
 
 func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error) {
@@ -72,18 +72,14 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 		plog.ErrorNode(node, "private_key and password, at least one of the parameter should be specified")
 		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter password or private_key", node))
 	}
-
-	var sshInst *SSHConsole
-	if privateKey != "" {
-		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user,
-			privateKeyFile: privateKey, node: node, exit: make(chan bool, 0)}
-	} else if password != "" {
-		sshInst = &SSHConsole{host: fmt.Sprintf("%s:%s", host, port), user: user,
-			password: password, node: node, exit: make(chan bool, 0)}
-	} else {
-		return nil, common.NewErr(common.INVALID_PARAMETER, fmt.Sprintf("%s: Please specify the parameter password or private_key", node))
-	}
-	return sshInst, nil
+	sshConsole := SSHConsole{
+		host:           fmt.Sprintf("%s:%s", host, port),
+		user:           user,
+		privateKeyFile: privateKey,
+		password:       password,
+		node:           node,
+		exit:           make(chan struct{}, 0)}
+	return &sshConsole, nil
 }
 
 func (s *SSHConsole) appendPrivateKeyAuthMethod(autoMethods *[]ssh.AuthMethod) {
@@ -159,8 +155,9 @@ func (s *SSHConsole) connectToHost() error {
 	go s.keepSSHAlive(s.client, conn)
 	s.session, err = s.client.NewSession()
 	if err != nil {
-		s.exit <- true
+		common.SafeClose(s.exit)
 		s.client.Close()
+		s.client = nil
 		return err
 	}
 	return nil
@@ -217,8 +214,10 @@ func (s *SSHConsole) Start() (*BaseSession, error) {
 
 func (s *SSHConsole) Close() error {
 	if s.client != nil {
-		s.exit <- true
-		return s.client.Close()
+		common.SafeClose(s.exit)
+		err := s.client.Close()
+		s.client = nil
+		return err
 	}
 	return nil
 }
