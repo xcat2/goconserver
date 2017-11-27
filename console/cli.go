@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"sort"
 	"strconv"
@@ -104,7 +105,7 @@ func (c *CongoCli) listCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List node(s) in goconserver service",
-		Long:  `List node(s) in goconserver service`,
+		Long:  `List node(s) in goconserver service. Format: congo list`,
 		Run:   c.list,
 	}
 	return cmd
@@ -136,8 +137,8 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 func (c *CongoCli) showCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <node>",
-		Short: "show node detail in goconserver service",
-		Long:  `show node detail in goconserver service. congo show <node>`,
+		Short: "Show node detail in goconserver service",
+		Long:  `Show node detail in goconserver service. Format: congo show <node>`,
 		Run:   c.show,
 	}
 	return cmd
@@ -164,9 +165,10 @@ func (c *CongoCli) show(cmd *cobra.Command, args []string) {
 func (c *CongoCli) loggingCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logging <node> on/off",
-		Short: "Start or stop logging for request node",
-		Long: `Turn on or turn off the console session in the background. If on, the
-		        console log will be kept. congo logging <node> on/off`,
+		Short: "Enable or disable the logging for specified node",
+		Long: `Enable or disable the console looging for the node. If on, the
+connection will be established and start the logging, otherwise the connection will be disconnected.
+Format: congo logging <node> on/off`,
 		Run: c.logging,
 	}
 	return cmd
@@ -196,8 +198,8 @@ func (c *CongoCli) logging(cmd *cobra.Command, args []string) {
 func (c *CongoCli) deleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <node>",
-		Short: "delete node in console server",
-		Long:  `delete node in console server. congo delete <node>`,
+		Short: "Delete node in console server",
+		Long:  `Delete node in console server. Format: congo delete <node>`,
 		Run:   c.delete,
 	}
 	return cmd
@@ -224,13 +226,17 @@ func (c *CongoCli) delete(cmd *cobra.Command, args []string) {
 func (c *CongoCli) createCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <node>",
-		Short: "create node in console server",
-		Long:  `create node in console server. congo create <node> driver=ssh ondemand=true params=`,
-		Run:   c.create,
+		Short: "Create node in console server",
+		Long: `Create node in console server. Format: congo create <node> driver=ssh ondemand=true --params=<key=val>[,<key>=<val>]
+Example: congo create kvmguest1 driver=cmd ondemand=false --params cmd="/opt/xcat/share/xcat/cons/kvm kvmguest1"
+         congo create sshnode1 driver=ssh ondemand=true --params user=root,host=11.5.102.73,port=22,password=cluster
+         congo create sshnode2 driver=ssh ondemand=false --params user=root,host=11.5.102.73,port=22,private_key=/root/.ssh/id_rsa`,
+		Run: c.create,
 	}
 	cmd.Flags().StringVarP(&createParams, "params", "p", "",
 		`Key/value pairs split by comma used by the ssh plugin, such as
-		host=11.0.0.0,password=password,user=admin,port=22`)
+			host=11.0.0.0,password=password,user=admin,port=22
+			cmd="ssh -l root 11.5.102.73`)
 	return cmd
 }
 
@@ -265,12 +271,45 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 func (c *CongoCli) consoleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "console <node>",
-		Short: "connect to the console server as the console client",
-		Long: `connect to the console server as the console client. congo console <node>.
-		        The console connection will not be shutdown until enter the sequence keys 'ctrl+e+c+.'`,
+		Short: "Connect to the console server to start the terminal session",
+		Long: `Connect to the console server to start the terminal session. Format: congo console <node>.
+Note: The console connection will not be shutdown until enter the sequence keys 'ctrl+e+c+.'`,
 		Run: c.console,
 	}
 	return cmd
+}
+
+func (c *CongoCli) waitInput(args interface{}) {
+	var err error
+	var exit bool
+	var n int
+	client := args.(*ConsoleClient)
+	b := make([]byte, 1024)
+	client.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	exit = false
+	defer func() {
+		terminal.Restore(int(os.Stdin.Fd()), client.origState)
+		if exit == true {
+			if err == nil {
+				fmt.Printf("Disconnected\n")
+				os.Exit(0)
+			} else {
+				fmt.Fprintf(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+		}
+	}()
+	n, err = os.Stdin.Read(b)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		exit = true
+		return
+	}
+	exit, _ = client.checkEscape(b, n)
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
@@ -304,7 +343,13 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		}
 		if client.retry {
 			fmt.Println("Session is teminated unexpectedly, retrying....")
+			waitTask, err := common.GetTaskManager().RegisterLoop(c.waitInput, client)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, err.Error())
+				os.Exit(1)
+			}
 			time.Sleep(time.Duration(10) * time.Second)
+			common.GetTaskManager().Stop(waitTask.GetID())
 		}
 		retry = client.retry
 	}

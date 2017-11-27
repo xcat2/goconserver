@@ -32,6 +32,7 @@ type ServerConfig struct {
 		Port              string `yaml:"port"`
 		DataDir           string `yaml:"datadir"`
 		LogDir            string `yaml:"logdir"`
+		LogTimestamp      bool   `yaml:"log_timestamp"`
 		ClientTimeout     int    `yaml:"client_timeout"`
 		TargetTimeout     int    `yaml:"target_timeout"`
 		ReconnectInterval int    `yaml:"reconnect_interval"`
@@ -56,6 +57,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
 	serverConfig.Console.LogDir = "/var/log/goconserver/nodes/"
+	serverConfig.Console.LogTimestamp = true
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
 	serverConfig.Console.ReconnectInterval = 5

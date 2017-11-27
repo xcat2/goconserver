@@ -1,16 +1,16 @@
 package console
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/chenglch/goconserver/common"
+	"github.com/chenglch/goconserver/plugins"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"time"
-
-	"github.com/chenglch/goconserver/common"
-	"github.com/chenglch/goconserver/plugins"
 	"sync"
+	"time"
 )
 
 const (
@@ -239,6 +239,35 @@ func (c *Console) Close() {
 	c.session.Close()
 }
 
+func (c *Console) insertStamp(in []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	var err error
+	nextLine := false
+	for i := 1; i < len(in); i++ {
+		if in[i-1] == '\r' && in[i] == '\n' {
+			_, err = buf.WriteString("\r\n[" + time.Now().Format("2006-01-02 15:04:05") + "]")
+			if err != nil {
+				return nil, err
+			}
+			i++
+			nextLine = true
+			continue
+		}
+		nextLine = false
+		err = buf.WriteByte(in[i-1])
+		if err != nil {
+			return nil, err
+		}
+	}
+	if nextLine == false {
+		err = buf.WriteByte(in[len(in)-1])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
+}
+
 func (c *Console) logger(path string, b []byte) error {
 	if path != "" {
 		var err error
@@ -248,6 +277,13 @@ func (c *Console) logger(path string, b []byte) error {
 			return err
 		}
 		defer fd.Close()
+		if serverConfig.Console.LogTimestamp {
+			b, err = c.insertStamp(b)
+			if err != nil {
+				plog.ErrorNode(c.node.StorageNode.Name, err)
+				return err
+			}
+		}
 		l := len(b)
 		for l > 0 {
 			n, err := fd.Write(b)

@@ -1,18 +1,16 @@
 package main
 
 import (
-	"log"
-	"net/http"
-
-	"fmt"
-
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"github.com/chenglch/goconserver/api"
 	"github.com/chenglch/goconserver/common"
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 	"time"
 )
