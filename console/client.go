@@ -35,7 +35,8 @@ func NewConsoleClient(host string, port string) *ConsoleClient {
 }
 
 func (c *ConsoleClient) input(args ...interface{}) {
-	b := args[0].([]interface{})[1].([]byte)
+	b := args[0].([]interface{})[2].([]byte)
+	node := args[0].([]interface{})[1].(string)
 	conn := args[0].([]interface{})[0].(net.Conn)
 	n, err := os.Stdin.Read(b)
 	if err != nil {
@@ -43,7 +44,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 		common.SafeClose(c.exit)
 		return
 	}
-	exit, pos := c.checkEscape(b, n)
+	exit, pos := c.checkEscape(b, n, node)
 	if exit == true {
 		b = []byte(ExitSequence)
 		n = len(b)
@@ -98,16 +99,24 @@ func (c *ConsoleClient) contains(cmds []byte, cmd byte) bool {
 	return false
 }
 
-func (c *ConsoleClient) runClientCmd(cmd byte) {
+func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
 	if cmd == CLIENT_CMD_HELP {
-		fmt.Printf("Help message from congo:\r\n" +
-			"Quit: Ctrl + E + C + .  \r\n" +
-			"Help: Ctrl + E + C + ?  \r\b" +
-			"The otherclient command is not supported temporarily.\r\n")
+		fmt.Printf("\r\nHelp message from congo:\r\n" +
+			"Ctrl + e + c + .         Exit from console session  \r\n" +
+			"Ctrl + e + c + ?         Print the help message for console command \r\n" +
+			"Ctrl + e + c + r         Replay last lines \r\n")
+	} else if cmd == CLIENT_CMD_REPLAY {
+		congo := NewCongoClient(clientConfig.HTTPUrl)
+		ret, err := congo.replay(node)
+		if err != nil {
+			fmt.Printf("Console command err: %s", err.Error())
+			return
+		}
+		fmt.Printf("\r\n%s\r\n", ret)
 	}
 }
 
-func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
+func (c *ConsoleClient) checkEscape(b []byte, n int, node string) (bool, int) {
 	pos := 0
 	for i := 0; i < n; i++ {
 		ch := b[i]
@@ -128,7 +137,7 @@ func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
 				common.SafeClose(c.exit)
 				return true, 0
 			} else if c.contains(CLIENT_CMDS, ch) {
-				c.runClientCmd(ch)
+				c.runClientCmd(ch, node)
 				c.escape = 0
 				pos = i + 1
 			} else {
@@ -140,7 +149,7 @@ func (c *ConsoleClient) checkEscape(b []byte, n int) (bool, int) {
 }
 
 func (c *ConsoleClient) transCr(b []byte, n int) []byte {
-	temp := make([]byte, 4096)
+	temp := make([]byte, common.BUF_SIZE)
 	j := 0
 	for i := 0; i < n; i++ {
 		ch := b[i]
@@ -206,8 +215,8 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 
 func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	defer conn.Close()
-	recvBuf := make([]byte, 4096)
-	sendBuf := make([]byte, 4096)
+	recvBuf := make([]byte, common.BUF_SIZE)
+	sendBuf := make([]byte, common.BUF_SIZE)
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	status, err := c.tryConnect(conn, name)
 	if status == STATUS_REDIRECT {
@@ -239,11 +248,12 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
 	c.registerSignal()
-	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, sendBuf)
+	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, name, sendBuf)
 	if err != nil {
 		return "", err
 	}
 	defer common.GetTaskManager().Stop(c.inputTask.GetID())
+	fmt.Printf("[Enter `^Ec?' for help]\r\n")
 	c.outputTask, err = common.GetTaskManager().RegisterLoop(c.output, conn, recvBuf)
 	if err != nil {
 		return "", err
@@ -386,4 +396,13 @@ func (c *CongoClient) Create(node string, attribs map[string]interface{}, params
 		return ret, err
 	}
 	return ret, nil
+}
+
+func (c *CongoClient) replay(node string) (string, error) {
+	url := fmt.Sprintf("%s/command/replay/%s", c.baseUrl, node)
+	ret, err := c.client.Get(url, nil, nil, true)
+	if err != nil {
+		return "", err
+	}
+	return string(ret.([]byte)), nil
 }

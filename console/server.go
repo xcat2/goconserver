@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -768,6 +769,35 @@ func (m *NodeManager) DeleteNodes(names []string) map[string]string {
 		m.NotifyPersist(names, common.ACTION_DELETE)
 	}
 	return result
+}
+
+func (m *NodeManager) Replay(name string) (string, int, string) {
+	var content string
+	var err error
+	if !m.stor.SupportWatcher() {
+		if !nodeManager.Exists(name) {
+			return "", http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
+		}
+		logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, name)
+		content, err = common.ReadTail(logFile, serverConfig.Console.ReplayLines)
+		if err != nil {
+			return "", http.StatusInternalServerError, fmt.Sprintf("Could not read log file %s", logFile)
+		}
+	} else {
+		nodeWithHost := m.stor.ListNodeWithHost()
+		if nodeWithHost == nil {
+			return "", http.StatusInternalServerError, "Could not get host information, please check the storage connection"
+		}
+		if _, ok := nodeWithHost[name]; !ok {
+			return "", http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
+		}
+		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		content, err = cRPCClient.GetReplayContent(name)
+		if err != nil {
+			return "", http.StatusInternalServerError, err.Error()
+		}
+	}
+	return content, http.StatusOK, ""
 }
 
 func (m *NodeManager) NotifyPersist(node interface{}, action int) {

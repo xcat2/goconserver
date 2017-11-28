@@ -28,7 +28,7 @@ func (s *HttpClient) request(method, url string, headers *http.Header, body io.R
 	return
 }
 
-func (s *HttpClient) Request(method string, url string, params *url.Values, headers *http.Header, body *[]byte, retJson bool) (data interface{}, err error) {
+func (s *HttpClient) Request(method string, url string, params *url.Values, headers *http.Header, body *[]byte, retRaw bool) (data interface{}, err error) {
 	// add params to url here
 	if params != nil {
 		url = url + "?" + params.Encode()
@@ -63,7 +63,7 @@ func (s *HttpClient) Request(method string, url string, params *url.Values, head
 	if err != nil {
 		return nil, errors.New("Can not read the message form response")
 	}
-	if retJson == true {
+	if retRaw == true {
 		return rbody, nil
 	}
 	if len(rbody) == 0 {
@@ -86,54 +86,54 @@ func (s *HttpClient) Do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func (s *HttpClient) Get(url string, params *url.Values, body interface{}, retJson bool) (interface{}, error) {
+func (s *HttpClient) Get(url string, params *url.Values, body interface{}, retRaw bool) (interface{}, error) {
 	var resp interface{}
 	var err error
 	if body != nil {
 		bodyJson, _ := json.Marshal(body)
-		resp, err = s.Request("GET", url, params, nil, &bodyJson, retJson)
+		resp, err = s.Request("GET", url, params, nil, &bodyJson, retRaw)
 	} else {
-		resp, err = s.Request("GET", url, params, nil, nil, retJson)
+		resp, err = s.Request("GET", url, params, nil, nil, retRaw)
 	}
 	return resp, err
 }
 
-func (s *HttpClient) Post(url string, params *url.Values, body interface{}, retJson bool) (interface{}, error) {
+func (s *HttpClient) Post(url string, params *url.Values, body interface{}, retRaw bool) (interface{}, error) {
 	bodyJson, err := json.Marshal(body)
-	resp, err := s.Request("POST", url, params, nil, &bodyJson, retJson)
+	resp, err := s.Request("POST", url, params, nil, &bodyJson, retRaw)
 	if err != nil || resp == nil {
 		return nil, err
 	}
 	return resp, err
 }
 
-func (s *HttpClient) Put(url string, params *url.Values, body interface{}, retJson bool) (interface{}, error) {
+func (s *HttpClient) Put(url string, params *url.Values, body interface{}, retRaw bool) (interface{}, error) {
 	var resp interface{}
 	var err error
 	if body != nil {
 		bodyJson, _ := json.Marshal(body)
-		resp, err = s.Request("PUT", url, params, nil, &bodyJson, retJson)
+		resp, err = s.Request("PUT", url, params, nil, &bodyJson, retRaw)
 	} else {
-		resp, err = s.Request("PUT", url, params, nil, nil, retJson)
+		resp, err = s.Request("PUT", url, params, nil, nil, retRaw)
 	}
 	return resp, err
 }
 
-func (s *HttpClient) Delete(url string, params *url.Values, body interface{}, retJson bool) (interface{}, error) {
+func (s *HttpClient) Delete(url string, params *url.Values, body interface{}, retRaw bool) (interface{}, error) {
 	var resp interface{}
 	var err error
 	if body != nil {
 		bodyJson, _ := json.Marshal(body)
-		resp, err = s.Request("DELETE", url, params, nil, &bodyJson, retJson)
+		resp, err = s.Request("DELETE", url, params, nil, &bodyJson, retRaw)
 	} else {
-		resp, err = s.Request("DELETE", url, params, nil, nil, retJson)
+		resp, err = s.Request("DELETE", url, params, nil, nil, retRaw)
 	}
 	return resp, err
 }
 
-func (s *HttpClient) Patch(url string, params *url.Values, body interface{}, retJson bool) (interface{}, error) {
+func (s *HttpClient) Patch(url string, params *url.Values, body interface{}, retRaw bool) (interface{}, error) {
 	bodyJson, err := json.Marshal(body)
-	resp, err := s.Request("PATCH", url, params, nil, &bodyJson, retJson)
+	resp, err := s.Request("PATCH", url, params, nil, &bodyJson, retRaw)
 	return resp, err
 }
 

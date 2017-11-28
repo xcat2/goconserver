@@ -5,6 +5,7 @@ package consolepb;
 service ConsoleManager {
   rpc ShowNode (NodeName) returns (Node) {};
   rpc SetConsoleState (NodesState) returns (Result) {};
+  rpc GetReplayContent (NodeName) returns (ReplayContent) {};
 }
 
 message NodeName {
@@ -26,4 +27,8 @@ message NodesState {
 
 message Result {
   map<string, string> result = 1;
+}
+
+message ReplayContent {
+  string content = 1;
 }

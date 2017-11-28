@@ -14,16 +14,17 @@ import (
 )
 
 const (
-	ExitSequence    = "\x05c." // ctrl-e, c
-	CLIENT_CMD_EXIT = '.'
-	CLIENT_CMD_HELP = '?'
+	ExitSequence      = "\x05c." // ctrl-e, c
+	CLIENT_CMD_EXIT   = '.'
+	CLIENT_CMD_HELP   = '?'
+	CLIENT_CMD_REPLAY = 'r'
 	// TODO(chenglch): If client command need to access the service of server,
 	// rest api could be used to implement this.
 
 )
 
 var (
-	CLIENT_CMDS = []byte{CLIENT_CMD_HELP}
+	CLIENT_CMDS = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY}
 )
 
 type Console struct {
@@ -156,7 +157,7 @@ func (c *Console) readTarget() {
 	}()
 	var err error
 	var n int
-	b := make([]byte, 4096)
+	b := make([]byte, common.BUF_SIZE)
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
 	msg := fmt.Sprintf("\nConnect to %s at %s\n\n", c.node.StorageNode.Name, time.Now().Format("2006-01-02 15:04:05"))
 	err = c.logger(logFile, []byte(msg))

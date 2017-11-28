@@ -9,12 +9,14 @@ import (
 	"io"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
 const (
+	BUF_SIZE     = 4096
 	TYPE_NO_LOCK = iota
 	TYPE_SHARE_LOCK
 	TYPE_EXCLUDE_LOCK
@@ -223,4 +225,59 @@ func SafeClose(ch chan struct{}) (justClosed bool) {
 	}
 	close(ch) // panic if ch is closed
 	return true
+}
+
+func ReverseStringSlice(l []string) {
+	for i := 0; i < int(len(l)/2); i++ {
+		li := len(l) - i - 1
+		l[i], l[li] = l[li], l[i]
+	}
+}
+
+func ReadTail(path string, tail int) (string, error) {
+	b := make([]byte, BUF_SIZE)
+	ret := make([]string, tail)
+	cur := tail - 1
+	fd, err := os.OpenFile(path, os.O_RDONLY, 0600)
+	if err != nil {
+		return "", err
+	}
+	defer fd.Close()
+	info, err := fd.Stat()
+	if err != nil {
+		return "", err
+	}
+	l := info.Size()
+	pos := l - BUF_SIZE
+	if pos < 0 {
+		pos = 0
+	}
+	var buf []byte
+	for pos >= 0 {
+		_, err = fd.Seek(pos, os.SEEK_CUR)
+		if err != nil {
+			return "", err
+		}
+		_, err := fd.Read(b)
+		if err != nil && err != io.EOF {
+			return "", err
+		}
+		if ret[cur] != "" {
+			buf = append(b, []byte(ret[cur])...)
+		} else {
+			buf = b
+		}
+		lines := strings.Split(string(buf), "\n")
+		for i := len(lines) - 1; i >= 0; i-- {
+			if cur < 0 {
+				return strings.Join(ret, "\n"), nil
+			}
+			ret[cur] += lines[i]
+			if i != 0 {
+				cur--
+			}
+		}
+		pos -= BUF_SIZE
+	}
+	return strings.Join(ret[cur:], "\n"), nil
 }

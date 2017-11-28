@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"net"
+	"path/filepath"
 )
 
 type ConsoleRPCServer struct {
@@ -53,6 +54,22 @@ func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae 
 	nodeManager.RWlock.RUnlock()
 	result := nodeManager.setConsoleState(names, pbNodesStae.State)
 	return &pb.Result{Result: result}, nil
+}
+
+func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
+	plog.Debug("Receive the RPC call GetReplayContent")
+	if !nodeManager.Exists(rpcNode.Name) {
+		nodeManager.RWlock.RUnlock()
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		return nil, common.ErrNodeNotExist
+	}
+	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, rpcNode.Name)
+	content, err := common.ReadTail(logFile, serverConfig.Console.ReplayLines)
+	if err != nil {
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Could not read log file %s", logFile))
+		return nil, err
+	}
+	return &pb.ReplayContent{Content: content}, nil
 }
 
 func (cRPCServer *ConsoleRPCServer) serve() {
@@ -144,4 +161,19 @@ func (cRPCClient *ConsoleRPCClient) SetConsoleState(names []string, state string
 		return nil, err
 	}
 	return pbResult.Result, nil
+}
+
+func (cRPCClient *ConsoleRPCClient) GetReplayContent(name string) (string, error) {
+	conn, err := cRPCClient.connect()
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	c := pb.NewConsoleManagerClient(conn)
+	pbResult, err := c.GetReplayContent(context.Background(), &pb.NodeName{Name: name})
+	if err != nil {
+		plog.Error(err)
+		return "", err
+	}
+	return pbResult.Content, nil
 }

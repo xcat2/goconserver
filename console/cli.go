@@ -309,7 +309,7 @@ func (c *CongoCli) waitInput(args interface{}) {
 		exit = true
 		return
 	}
-	exit, _ = client.checkEscape(b, n)
+	exit, _ = client.checkEscape(b, n, "")
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
