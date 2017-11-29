@@ -6,6 +6,7 @@ service ConsoleManager {
   rpc ShowNode (NodeName) returns (Node) {};
   rpc SetConsoleState (NodesState) returns (Result) {};
   rpc GetReplayContent (NodeName) returns (ReplayContent) {};
+  rpc ListSessionUser (NodeName) returns (SessionUsers) {};
 }
 
 message NodeName {
@@ -31,4 +32,8 @@ message Result {
 
 message ReplayContent {
   string content = 1;
+}
+
+message SessionUsers {
+  repeated string users = 1;
 }

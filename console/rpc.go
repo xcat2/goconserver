@@ -59,7 +59,6 @@ func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae 
 func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
 	plog.Debug("Receive the RPC call GetReplayContent")
 	if !nodeManager.Exists(rpcNode.Name) {
-		nodeManager.RWlock.RUnlock()
 		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
 		return nil, common.ErrNodeNotExist
 	}
@@ -70,6 +69,20 @@ func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb
 		return nil, err
 	}
 	return &pb.ReplayContent{Content: content}, nil
+}
+
+func (s *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.SessionUsers, error) {
+	plog.Debug("Receive the RPC call ListSessionUser")
+	nodeManager.RWlock.RLock()
+	if !nodeManager.Exists(rpcNode.Name) {
+		nodeManager.RWlock.RUnlock()
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		return nil, common.ErrNodeNotExist
+	}
+	node := nodeManager.Nodes[rpcNode.Name]
+	users := node.console.ListSessionUser()
+	nodeManager.RWlock.RUnlock()
+	return &pb.SessionUsers{Users: users}, nil
 }
 
 func (cRPCServer *ConsoleRPCServer) serve() {
@@ -176,4 +189,19 @@ func (cRPCClient *ConsoleRPCClient) GetReplayContent(name string) (string, error
 		return "", err
 	}
 	return pbResult.Content, nil
+}
+
+func (cRPCClient *ConsoleRPCClient) ListSessionUser(name string) ([]string, error) {
+	conn, err := cRPCClient.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	c := pb.NewConsoleManagerClient(conn)
+	pbResult, err := c.ListSessionUser(context.Background(), &pb.NodeName{Name: name})
+	if err != nil {
+		plog.Error(err)
+		return nil, err
+	}
+	return pbResult.Users, nil
 }

@@ -227,6 +227,22 @@ func SafeClose(ch chan struct{}) (justClosed bool) {
 	return true
 }
 
+func SafeSend(ch chan struct{}, data struct{}) (closed bool) {
+	defer func() {
+		if recover() != nil {
+			closed = true
+		}
+	}()
+	if ch == nil {
+		return true
+	}
+	select {
+	case ch <- data:
+	default:
+	}
+	return false
+}
+
 func ReverseStringSlice(l []string) {
 	for i := 0; i < int(len(l)/2); i++ {
 		li := len(l) - i - 1

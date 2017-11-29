@@ -18,13 +18,14 @@ const (
 	CLIENT_CMD_EXIT   = '.'
 	CLIENT_CMD_HELP   = '?'
 	CLIENT_CMD_REPLAY = 'r'
+	CLIENT_CMD_WHO    = 'w'
 	// TODO(chenglch): If client command need to access the service of server,
 	// rest api could be used to implement this.
 
 )
 
 var (
-	CLIENT_CMDS = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY}
+	CLIENT_CMDS = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY, CLIENT_CMD_WHO}
 )
 
 type Console struct {
@@ -213,6 +214,16 @@ func (c *Console) Start() {
 
 func (c *Console) Stop() {
 	c.Close()
+}
+
+func (c *Console) ListSessionUser() []string {
+	ret := make([]string, len(c.bufConn))
+	i := 0
+	for c, _ := range c.bufConn {
+		ret[i] = c.RemoteAddr().String()
+		i++
+	}
+	return ret
 }
 
 // close session from rest api

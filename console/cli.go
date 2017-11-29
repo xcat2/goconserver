@@ -5,10 +5,12 @@ import (
 	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/unix"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -282,10 +284,11 @@ Note: The console connection will not be shutdown until enter the sequence keys 
 func (c *CongoCli) waitInput(args interface{}) {
 	var err error
 	var exit bool
-	var n int
 	client := args.(*ConsoleClient)
 	b := make([]byte, 1024)
-	client.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
+	in := int(os.Stdin.Fd())
+	n := 0
+	client.origState, err = terminal.MakeRaw(in)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		os.Exit(1)
@@ -303,13 +306,25 @@ func (c *CongoCli) waitInput(args interface{}) {
 			}
 		}
 	}()
-	n, err = os.Stdin.Read(b)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-		exit = true
-		return
+	select {
+	case _, ok := <-client.sigio:
+		if !ok {
+			return
+		}
+		for {
+			size, err := syscall.Read(in, b[n:])
+			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+				break
+			}
+			n += size
+		}
+		if err != nil && err != unix.EAGAIN && err != unix.EWOULDBLOCK {
+			fmt.Fprintf(os.Stderr, err.Error())
+			exit = true
+			return
+		}
+		exit, _ = client.checkEscape(b, n, "")
 	}
-	exit, _ = client.checkEscape(b, n, "")
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
@@ -342,7 +357,8 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 			fmt.Printf("\rThe connection is disconnected\n")
 		}
 		if client.retry {
-			fmt.Println("Session is teminated unexpectedly, retrying....")
+			fmt.Println("[Enter `^Ec.' to exit]\r\nSession is teminated unexpectedly, retrying....")
+			client.sigio = make(chan struct{}, 1)
 			waitTask, err := common.GetTaskManager().RegisterLoop(c.waitInput, client)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, err.Error())
@@ -350,6 +366,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 			}
 			time.Sleep(time.Duration(10) * time.Second)
 			common.GetTaskManager().Stop(waitTask.GetID())
+			common.SafeClose(client.sigio)
 		}
 		retry = client.retry
 	}

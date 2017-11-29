@@ -800,6 +800,35 @@ func (m *NodeManager) Replay(name string) (string, int, string) {
 	return content, http.StatusOK, ""
 }
 
+func (m *NodeManager) ListUser(name string) (map[string][]string, int, string) {
+	var node *Node
+	var users []string
+	var err error
+	ret := make(map[string][]string)
+	if !m.stor.SupportWatcher() {
+		if !nodeManager.Exists(name) {
+			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
+		}
+		node = nodeManager.Nodes[name]
+		users = node.console.ListSessionUser()
+	} else {
+		nodeWithHost := m.stor.ListNodeWithHost()
+		if nodeWithHost == nil {
+			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
+		}
+		if _, ok := nodeWithHost[name]; !ok {
+			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
+		}
+		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		users, err = cRPCClient.ListSessionUser(name)
+		if err != nil {
+			return nil, http.StatusInternalServerError, err.Error()
+		}
+	}
+	ret["users"] = users
+	return ret, http.StatusOK, ""
+}
+
 func (m *NodeManager) NotifyPersist(node interface{}, action int) {
 	if !m.stor.SupportWatcher() {
 		storNodes := m.toStorNodes()

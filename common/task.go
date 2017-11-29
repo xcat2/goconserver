@@ -88,7 +88,7 @@ func (taskManager *TaskManager) alloc() (*Task, error) {
 func (taskManager *TaskManager) Register(fc interface{}, args ...interface{}) (*Task, error) {
 	task, err := taskManager.alloc()
 	if err != nil {
-		plog.Error(err)
+		plog.Debug(err)
 		return nil, err
 	}
 	go func(fc interface{}, args ...interface{}) {
@@ -107,7 +107,7 @@ func (taskManager *TaskManager) Register(fc interface{}, args ...interface{}) (*
 func (taskManager *TaskManager) RegisterLoop(fc interface{}, args ...interface{}) (*Task, error) {
 	task, err := taskManager.alloc()
 	if err != nil {
-		plog.Error(err)
+		plog.Debug(err)
 		return nil, err
 	}
 	go func(fc interface{}, args ...interface{}) {
@@ -160,7 +160,7 @@ func (taskManager *TaskManager) RegisterLoop(fc interface{}, args ...interface{}
 func (taskManager *TaskManager) RegisterActorWorker(actor Actor) (*Task, error) {
 	task, err := taskManager.alloc()
 	if err != nil {
-		plog.Error(err)
+		plog.Debug(err)
 		return nil, err
 	}
 	go func() {
@@ -200,7 +200,8 @@ func (taskManager *TaskManager) Send(id int, msg interface{}) error {
 	var ok bool
 	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
-		plog.Error(fmt.Sprintf("Could not find task for task id: %d", id))
+		taskManager.mutex.Unlock()
+		plog.Debug(fmt.Sprintf("Could not find task for task id: %d", id))
 		return ErrTaskNotExist
 	}
 	task.msg <- msg
@@ -220,7 +221,8 @@ func (taskManager *TaskManager) Stop(id int) error {
 	var ok bool
 	taskManager.mutex.Lock()
 	if task, ok = taskManager.taskMap[id]; !ok {
-		plog.Error(fmt.Sprintf("Could not find task for task id: %d", id))
+		taskManager.mutex.Unlock()
+		plog.Debug(fmt.Sprintf("Could not find task for task id: %d", id))
 		return ErrTaskNotExist
 	}
 	taskManager.mutex.Unlock()

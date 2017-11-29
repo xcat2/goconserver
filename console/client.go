@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sys/unix"
 	"io"
 	"net"
 	"net/http"
@@ -26,22 +27,52 @@ type ConsoleClient struct {
 	retry      bool
 	inputTask  *common.Task
 	outputTask *common.Task
+	sigio      chan struct{}
+	reported   bool // error already reported
 }
 
 func NewConsoleClient(host string, port string) *ConsoleClient {
-	return &ConsoleClient{host: host, port: port,
-		exit:  make(chan struct{}, 0),
-		retry: true}
+	return &ConsoleClient{host: host,
+		port:     port,
+		exit:     make(chan struct{}, 0),
+		retry:    true,
+		sigio:    make(chan struct{}, 1),
+		reported: false,
+	}
 }
 
 func (c *ConsoleClient) input(args ...interface{}) {
 	b := args[0].([]interface{})[2].([]byte)
 	node := args[0].([]interface{})[1].(string)
 	conn := args[0].([]interface{})[0].(net.Conn)
-	n, err := os.Stdin.Read(b)
+	in := int(os.Stdin.Fd())
+	n := 0
+	err := common.Fcntl(in, unix.F_SETFL, unix.O_ASYNC|unix.O_NONBLOCK)
 	if err != nil {
-		fmt.Println(err)
-		common.SafeClose(c.exit)
+		return
+	}
+
+	select {
+	case _, ok := <-c.sigio:
+		if !ok {
+			return
+		}
+		for {
+			size, err := syscall.Read(in, b[n:])
+			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+				break
+			}
+			n += size
+		}
+		if err != nil && err != unix.EAGAIN && err != unix.EWOULDBLOCK {
+			if c.reported == false {
+				fmt.Println(err)
+			}
+			c.close()
+			return
+		}
+	}
+	if n == 0 {
 		return
 	}
 	exit, pos := c.checkEscape(b, n, node)
@@ -61,18 +92,18 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	conn := args[0].([]interface{})[0].(net.Conn)
 	n, err := c.ReceiveInt(conn)
 	if err != nil {
-		if c.retry == true {
-			fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
+		if c.retry == true && c.reported == false {
+			fmt.Printf("\rCould not receive message, error: %s.\r\n", err.Error())
 		}
-		common.SafeClose(c.exit)
+		c.close()
 		return
 	}
 	b, err = c.ReceiveBytes(conn, n)
 	if err != nil {
-		if c.retry == true {
-			fmt.Printf("\rCould not receive message, error: %s\r\n", err.Error())
+		if c.retry == true && c.reported == false {
+			fmt.Printf("\rCould not receive message, error: %s.\r\n", err.Error())
 		}
-		common.SafeClose(c.exit)
+		c.close()
 		return
 	}
 	b = c.transCr(b, n)
@@ -80,10 +111,10 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	for n > 0 {
 		tmp, err := os.Stdout.Write(b)
 		if err != nil {
-			if c.retry == true {
-				fmt.Printf("\rCould not send message, error: %s\r\n", err.Error())
+			if c.retry == true && c.reported == false {
+				fmt.Printf("\rCould not send message, error: %s.\r\n", err.Error())
 			}
-			common.SafeClose(c.exit)
+			c.close()
 			return
 		}
 		n -= tmp
@@ -104,7 +135,8 @@ func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
 		fmt.Printf("\r\nHelp message from congo:\r\n" +
 			"Ctrl + e + c + .         Exit from console session  \r\n" +
 			"Ctrl + e + c + ?         Print the help message for console command \r\n" +
-			"Ctrl + e + c + r         Replay last lines \r\n")
+			"Ctrl + e + c + r         Replay last lines \r\n" +
+			"Ctrl + e + c + w         Who is on this session \r\n")
 	} else if cmd == CLIENT_CMD_REPLAY {
 		congo := NewCongoClient(clientConfig.HTTPUrl)
 		ret, err := congo.replay(node)
@@ -113,6 +145,17 @@ func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
 			return
 		}
 		fmt.Printf("\r\n%s\r\n", ret)
+	} else if cmd == CLIENT_CMD_WHO {
+		congo := NewCongoClient(clientConfig.HTTPUrl)
+		users, err := congo.listUser(node)
+		if err != nil {
+			fmt.Printf("Console command err: %s", err.Error())
+			return
+		}
+		fmt.Printf("\r\n")
+		for _, v := range users["users"].([]interface{}) {
+			fmt.Printf("User: %s\r\n", v.(string))
+		}
 	}
 }
 
@@ -134,7 +177,7 @@ func (c *ConsoleClient) checkEscape(b []byte, n int, node string) (bool, int) {
 			}
 		} else if c.escape == 2 {
 			if ch == CLIENT_CMD_EXIT {
-				common.SafeClose(c.exit)
+				c.close()
 				return true, 0
 			} else if c.contains(CLIENT_CMDS, ch) {
 				c.runClientCmd(ch, node)
@@ -304,16 +347,26 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 	return conn, nil
 }
 
+func (c *ConsoleClient) close() {
+	c.reported = true
+	common.SafeClose(c.exit)
+	common.SafeClose(c.sigio)
+}
+
 func (c *ConsoleClient) registerSignal() {
 	exitHandler := func(s os.Signal, arg interface{}) {
 		fmt.Fprintf(os.Stderr, "handle signal: %v\n", s)
 		terminal.Restore(int(os.Stdin.Fd()), c.origState)
 		os.Exit(1)
 	}
+	ioHandler := func(s os.Signal, arg interface{}) {
+		common.SafeSend(c.sigio, struct{}{})
+	}
 	signalSet := common.GetSignalSet()
 	signalSet.Register(syscall.SIGINT, exitHandler)
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, exitHandler)
+	signalSet.Register(syscall.SIGIO, ioHandler)
 	go common.DoSignal()
 }
 
@@ -405,4 +458,13 @@ func (c *CongoClient) replay(node string) (string, error) {
 		return "", err
 	}
 	return string(ret.([]byte)), nil
+}
+
+func (c *CongoClient) listUser(node string) (map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/command/user/%s", c.baseUrl, node)
+	ret, err := c.client.Get(url, nil, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	return ret.(map[string]interface{}), nil
 }
