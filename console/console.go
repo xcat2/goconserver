@@ -19,9 +19,6 @@ const (
 	CLIENT_CMD_HELP   = '?'
 	CLIENT_CMD_REPLAY = 'r'
 	CLIENT_CMD_WHO    = 'w'
-	// TODO(chenglch): If client command need to access the service of server,
-	// rest api could be used to implement this.
-
 )
 
 var (
@@ -128,7 +125,7 @@ func (c *Console) writeClient(conn net.Conn) {
 		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), c.node.StorageNode.Name)
 	err := c.network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
 	if err != nil {
-		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+		plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 		return
 	}
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
@@ -144,7 +141,7 @@ func (c *Console) writeClient(conn net.Conn) {
 		b := <-bufChan
 		err = c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
-			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+			plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
 		}
 	}
