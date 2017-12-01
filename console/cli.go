@@ -5,7 +5,6 @@ import (
 	"github.com/chenglch/goconserver/common"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
-	"golang.org/x/sys/unix"
 	"os"
 	"sort"
 	"strconv"
@@ -313,12 +312,12 @@ func (c *CongoCli) waitInput(args interface{}) {
 		}
 		for {
 			size, err := syscall.Read(in, b[n:])
-			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 				break
 			}
 			n += size
 		}
-		if err != nil && err != unix.EAGAIN && err != unix.EWOULDBLOCK {
+		if err != nil && err != syscall.EAGAIN && err != syscall.EWOULDBLOCK {
 			fmt.Fprintf(os.Stderr, err.Error())
 			exit = true
 			return
@@ -371,6 +370,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 			common.SafeClose(client.sigio)
 			quit <- struct{}{}
 		}
+		close(quit)
 		retry = client.retry
 	}
 }

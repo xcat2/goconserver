@@ -47,9 +47,7 @@ func GetSignalSet() *SignalSet {
 }
 
 func (set *SignalSet) Register(s os.Signal, handler SignalHandler) {
-	if _, found := set.m[s]; !found {
-		set.m[s] = handler
-	}
+	set.m[s] = handler
 }
 
 func (set *SignalSet) Handle(sig os.Signal, arg interface{}) (err error) {

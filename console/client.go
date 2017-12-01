@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
-	"golang.org/x/sys/unix"
 	"io"
 	"net"
 	"net/http"
 	neturl "net/url"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -47,11 +47,16 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	conn := args[0].([]interface{})[0].(net.Conn)
 	in := int(os.Stdin.Fd())
 	n := 0
-	err := common.Fcntl(in, unix.F_SETFL, unix.O_ASYNC|unix.O_NONBLOCK)
+	err := common.Fcntl(in, syscall.F_SETFL, syscall.O_ASYNC|syscall.O_NONBLOCK)
 	if err != nil {
 		return
 	}
-
+	if runtime.GOOS != "darwin" {
+		err = common.Fcntl(in, syscall.F_SETOWN, syscall.Getpid())
+		if err != nil {
+			return
+		}
+	}
 	select {
 	case _, ok := <-c.sigio:
 		if !ok {
@@ -59,12 +64,12 @@ func (c *ConsoleClient) input(args ...interface{}) {
 		}
 		for {
 			size, err := syscall.Read(in, b[n:])
-			if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
 				break
 			}
 			n += size
 		}
-		if err != nil && err != unix.EAGAIN && err != unix.EWOULDBLOCK {
+		if err != nil && err != syscall.EAGAIN && err != syscall.EWOULDBLOCK {
 			if c.reported == false {
 				fmt.Println(err)
 			}
