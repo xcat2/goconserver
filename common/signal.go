@@ -10,7 +10,7 @@ var (
 	signalSet *SignalSet
 )
 
-func DoSignal() {
+func DoSignal(done <-chan struct{}) {
 	s := GetSignalSet()
 	for {
 		c := make(chan os.Signal)
@@ -19,11 +19,15 @@ func DoSignal() {
 			sigs = append(sigs, sig)
 		}
 		signal.Notify(c, sigs...)
-		sig := <-c
-		err := s.Handle(sig, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "unknown signal received: %v\n", sig)
-			os.Exit(1)
+		select {
+		case sig := <-c:
+			err := s.Handle(sig, nil)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unknown signal received: %v\n", sig)
+				os.Exit(1)
+			}
+		case <-done:
+			return
 		}
 	}
 }

@@ -27,7 +27,7 @@ func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeNam
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
 		nodeManager.RWlock.RUnlock()
-		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
 		return nil, common.ErrNodeNotExist
 	}
 	node := nodeManager.Nodes[rpcNode.Name]
@@ -46,7 +46,7 @@ func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae 
 	names := make([]string, 0, len(pbNodesStae.Names))
 	for _, name := range pbNodesStae.Names {
 		if !nodeManager.Exists(name) {
-			plog.ErrorNode(name, fmt.Sprintf("Could not find node on %s", serverConfig.Global.Host))
+			plog.ErrorNode(name, fmt.Sprintf("Could not find node on %s", nodeManager.hostname))
 			continue
 		}
 		names = append(names, name)
@@ -59,7 +59,7 @@ func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae 
 func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
 	plog.Debug("Receive the RPC call GetReplayContent")
 	if !nodeManager.Exists(rpcNode.Name) {
-		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
 		return nil, common.ErrNodeNotExist
 	}
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, rpcNode.Name)
@@ -76,7 +76,7 @@ func (s *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
 		nodeManager.RWlock.RUnlock()
-		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", serverConfig.Global.Host))
+		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
 		return nil, common.ErrNodeNotExist
 	}
 	node := nodeManager.Nodes[rpcNode.Name]

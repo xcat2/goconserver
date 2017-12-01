@@ -340,6 +340,8 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 	common.NewTaskManager(100, 16)
 	for retry {
 		client := NewConsoleClient(clientConfig.ServerHost, clientConfig.ConsolePort)
+		quit := make(chan struct{}, 0)
+		client.registerSignal(quit)
 		conn, err := client.Connect()
 		if err != nil {
 			fmt.Printf("\rCould not connect to %s\n", args[0])
@@ -367,6 +369,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 			time.Sleep(time.Duration(10) * time.Second)
 			common.GetTaskManager().Stop(waitTask.GetID())
 			common.SafeClose(client.sigio)
+			quit <- struct{}{}
 		}
 		retry = client.retry
 	}

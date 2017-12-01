@@ -420,7 +420,7 @@ func (c *ConsoleServer) registerSignal() {
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, reloadHandler)
 	signalSet.Register(syscall.SIGPIPE, ignoreHandler)
-	go common.DoSignal()
+	go common.DoSignal(nil)
 }
 
 type NodeManager struct {
@@ -428,11 +428,17 @@ type NodeManager struct {
 	RWlock    *sync.RWMutex
 	stor      storage.StorInterface
 	rpcServer *ConsoleRPCServer
+	hostname  string
 }
 
 func GetNodeManager() *NodeManager {
 	if nodeManager == nil {
 		nodeManager = new(NodeManager)
+		hostname, err := os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+		nodeManager.hostname = hostname
 		nodeManager.Nodes = make(map[string]*Node)
 		nodeManager.RWlock = new(sync.RWMutex)
 		consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
@@ -512,7 +518,7 @@ func (m *NodeManager) ListNode() map[string][]map[string]string {
 		for _, node := range nodeManager.Nodes {
 			nodeMap := make(map[string]string)
 			nodeMap["name"] = node.StorageNode.Name
-			nodeMap["host"] = serverConfig.Global.Host
+			nodeMap["host"] = m.hostname
 			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
 	} else {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/coreos/etcd/clientv3"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -37,7 +38,11 @@ func newEtcdStorage() StorInterface {
 	etcdStor.endpoints = strings.Split(serverConfig.Etcd.Endpoints, " ")
 	etcdStor.dialTimeout = time.Duration(serverConfig.Etcd.DailTimeout) * time.Second
 	etcdStor.requestTimeout = time.Duration(serverConfig.Etcd.RequestTimeout) * time.Second
-	etcdStor.host = serverConfig.Global.Host
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+	etcdStor.host = hostname
 	err = etcdStor.register()
 	if err != nil {
 		panic(err)

@@ -290,7 +290,6 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 		return "", err
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
-	c.registerSignal()
 	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, name, sendBuf)
 	if err != nil {
 		return "", err
@@ -353,7 +352,7 @@ func (c *ConsoleClient) close() {
 	common.SafeClose(c.sigio)
 }
 
-func (c *ConsoleClient) registerSignal() {
+func (c *ConsoleClient) registerSignal(done <-chan struct{}) {
 	exitHandler := func(s os.Signal, arg interface{}) {
 		fmt.Fprintf(os.Stderr, "handle signal: %v\n", s)
 		terminal.Restore(int(os.Stdin.Fd()), c.origState)
@@ -367,7 +366,7 @@ func (c *ConsoleClient) registerSignal() {
 	signalSet.Register(syscall.SIGTERM, exitHandler)
 	signalSet.Register(syscall.SIGHUP, exitHandler)
 	signalSet.Register(syscall.SIGIO, ioHandler)
-	go common.DoSignal()
+	go common.DoSignal(done)
 }
 
 type CongoClient struct {
