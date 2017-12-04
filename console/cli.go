@@ -344,6 +344,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		conn, err := client.Connect()
 		if err != nil {
 			fmt.Printf("\rCould not connect to %s\n", args[0])
+			panic(err)
 		}
 		host, err := client.Handle(conn, args[0])
 		if err == nil && host != "" {

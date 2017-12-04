@@ -151,14 +151,18 @@ func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
 		plog.DebugNode(c.node.StorageNode.Name, "readTarget goruntine quit")
+		logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
+		err := c.logger(logFile, []byte("\r\n[goconserver disconnected]\r\n"))
+		if err != nil {
+			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+		}
 		c.Stop()
 	}()
 	var err error
 	var n int
 	b := make([]byte, common.BUF_SIZE)
 	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
-	msg := fmt.Sprintf("\nConnect to %s at %s\n\n", c.node.StorageNode.Name, time.Now().Format("2006-01-02 15:04:05"))
-	err = c.logger(logFile, []byte(msg))
+	err = c.logger(logFile, []byte("\r\n[goconserver connected]\r\n"))
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
 	}
