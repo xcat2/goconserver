@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -305,6 +306,20 @@ func (c *CongoCli) waitInput(args interface{}) {
 			}
 		}
 	}()
+	err = common.Fcntl(in, syscall.F_SETFL, syscall.O_ASYNC|syscall.O_NONBLOCK)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		exit = true
+		return
+	}
+	if runtime.GOOS != "darwin" {
+		err = common.Fcntl(in, syscall.F_SETOWN, syscall.Getpid())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, err.Error())
+			exit = true
+			return
+		}
+	}
 	select {
 	case _, ok := <-client.sigio:
 		if !ok {
