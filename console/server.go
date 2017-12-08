@@ -103,6 +103,8 @@ func (node *Node) restartConsole() {
 	}
 	if err := node.RequireLock(false); err != nil {
 		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
+		go node.startConsole(true)
 		return
 	}
 	if node.GetStatus() == STATUS_CONNECTED {
@@ -114,7 +116,7 @@ func (node *Node) restartConsole() {
 		node.Release(false)
 		return
 	}
-	go node.startConsole()
+	go node.startConsole(true)
 	if err := common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 		node.Release(false)
@@ -123,37 +125,45 @@ func (node *Node) restartConsole() {
 	node.Release(false)
 }
 
-func (node *Node) startConsole() {
+// A little different from StartConsole, this function do not handle the node lock, node ready
+// is used to wake up the waiting channel outside.
+// param init: indicate if the session is started when enroll the node.
+func (node *Node) startConsole(init bool) {
 	var consolePlugin plugins.ConsolePlugin
 	var err error
 	var baseSession *plugins.BaseSession
 	if node.console != nil {
 		plog.WarningNode(node.StorageNode.Name, "Console has already been started")
+		node.ready <- true
 		return
 	}
 	consolePlugin, err = plugins.StartConsole(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params)
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
-			serverConfig.Console.ReconnectInterval, err.Error()))
-		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
-		go node.restartConsole()
+		if init && node.StorageNode.Ondemand == false {
+			plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				serverConfig.Console.ReconnectInterval, err.Error()))
+			time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
+			go node.restartConsole()
+		}
 		return
 	}
 	baseSession, err = consolePlugin.Start()
 	if err != nil {
 		node.status = STATUS_ERROR
 		node.ready <- false
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
-			serverConfig.Console.ReconnectInterval, err.Error()))
-		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
-		go node.restartConsole()
+		if init && node.StorageNode.Ondemand == false {
+			plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				serverConfig.Console.ReconnectInterval, err.Error()))
+			time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
+			go node.restartConsole()
+		}
 		return
 	}
 	node.console = NewConsole(baseSession, node)
 	node.console.Start()
-	if node.StorageNode.Ondemand == false && node.logging == true {
+	if init && node.StorageNode.Ondemand == false && node.logging == true {
 		plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
 		time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 		node.restartConsole()
@@ -161,7 +171,7 @@ func (node *Node) startConsole() {
 }
 
 // has lock
-func (node *Node) StartConsole() {
+func (node *Node) StartConsole(init bool) {
 	if err := node.RequireLock(false); err != nil {
 		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
 		return
@@ -170,7 +180,7 @@ func (node *Node) StartConsole() {
 		node.Release(false)
 		return
 	}
-	go node.startConsole()
+	go node.startConsole(init)
 	// open a new groutine to make the rest request asynchronous
 	go func() {
 		if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
@@ -336,7 +346,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			if node.status == STATUS_CONNECTED {
 				node.Release(false)
 			} else {
-				go node.startConsole()
+				go node.startConsole(false)
 				if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 					node.Release(false)
@@ -500,7 +510,7 @@ func (m *NodeManager) initNodes() {
 					node.Release(false)
 					return
 				}
-				go node.startConsole()
+				go node.startConsole(true)
 				if err := common.TimeoutChan(node.GetReadyChan(),
 					serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.StorageNode.Name, err)
@@ -577,8 +587,10 @@ func (m *NodeManager) setConsoleState(nodes []string, state string) map[string]s
 		node := m.Nodes[v]
 		m.RWlock.Unlock()
 		if state == CONSOLE_ON && node.GetStatus() != STATUS_CONNECTED {
-			node.StartConsole()
+			node.StorageNode.Ondemand = false
+			node.StartConsole(false)
 		} else if state == CONSOLE_OFF && node.GetStatus() == STATUS_CONNECTED {
+			node.StorageNode.Ondemand = true
 			if err := node.StopConsole(); err != nil {
 				continue
 			}
@@ -592,7 +604,9 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 	var host, node string
 	var nodeList []string
 	if !m.stor.SupportWatcher() {
-		return m.setConsoleState(nodes, state)
+		ret := m.setConsoleState(nodes, state)
+		nodeManager.NotifyPersist(nil, common.ACTION_NIL)
+		return ret
 	}
 	nodeWithHost := nodeManager.stor.ListNodeWithHost()
 	hostNodes := make(map[string][]string, 0)
@@ -616,6 +630,7 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 			result[k] = v
 		}
 	}
+	// TODO: NotifyPersist has not been implemented.
 	return result
 }
 
@@ -636,7 +651,7 @@ func (m *NodeManager) PostNode(storNode *storage.Node) (int, string) {
 		m.NotifyPersist(nil, common.ACTION_NIL)
 		plog.InfoNode(node.StorageNode.Name, "Created.")
 		if node.StorageNode.Ondemand == false {
-			node.StartConsole()
+			node.StartConsole(true)
 		}
 	} else {
 		storNodes := make(map[string][]storage.Node)
@@ -688,7 +703,7 @@ func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]stri
 			result[node.StorageNode.Name] = "Created"
 		}
 		if node.StorageNode.Ondemand == false {
-			node.StartConsole()
+			node.StartConsole(true)
 		}
 	}
 }

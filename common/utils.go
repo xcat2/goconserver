@@ -116,6 +116,7 @@ func TimeoutChan(c chan bool, t int) error {
 	case <-c:
 	case <-timeout:
 		plog.Warn(fmt.Sprintf("Timeout happens after waiting %d seconds", t))
+		return ErrTimeout
 	}
 	return nil
 }

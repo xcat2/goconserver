@@ -60,14 +60,12 @@ func (c *Console) Disconnect(conn net.Conn) {
 	var bufChan chan []byte
 	var ok bool
 	conn.Close()
+	c.mutex.Lock()
 	if bufChan, ok = c.bufConn[conn]; ok {
-		c.mutex.Lock()
-		if bufChan, ok = c.bufConn[conn]; ok {
-			close(bufChan)
-			delete(c.bufConn, conn)
-		}
-		c.mutex.Unlock()
+		close(bufChan)
+		delete(c.bufConn, conn)
 	}
+	c.mutex.Unlock()
 	// all of the client has been disconnected
 	if len(c.bufConn) == 0 && c.node.StorageNode.Ondemand == true {
 		c.Close()

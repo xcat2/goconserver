@@ -14,6 +14,7 @@ const (
 	CONNECTION_ERROR
 	ALREADY_EXIST
 	OUTOF_QUATA
+	TIMEOUT
 	UNLOCKED
 	NOT_TERMINAL
 	HOST_NOT_EXIST
@@ -37,6 +38,7 @@ const (
 	STRING_CONNECTION_ERROR  = "Could not connect"
 	STRING_ALREADY_EXIST     = "Already exit"
 	STRING_OUTOF_QUOTA       = "Out of quota"
+	STRING_TIMEOUT           = "Timeout"
 
 	STRING_NOT_TERMINAL  = "Not terminal"
 	STRING_INVALID_TYPE  = "Invalid type"
@@ -61,6 +63,7 @@ var (
 	ErrConnection       = NewErr(CONNECTION_ERROR, STRING_CONNECTION_ERROR)
 	ErrAlreadyExist     = NewErr(ALREADY_EXIST, STRING_ALREADY_EXIST)
 	ErrOutOfQuota       = NewErr(OUTOF_QUATA, STRING_OUTOF_QUOTA)
+	ErrTimeout          = NewErr(TIMEOUT, STRING_TIMEOUT)
 
 	ErrNotTerminal = NewErr(NOT_TERMINAL, STRING_NOT_TERMINAL)
 	ErrInvalidType = NewErr(INVALID_TYPE, STRING_INVALID_TYPE)
