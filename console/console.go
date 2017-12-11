@@ -67,7 +67,7 @@ func (c *Console) Disconnect(conn net.Conn) {
 	}
 	c.mutex.Unlock()
 	// all of the client has been disconnected
-	if len(c.bufConn) == 0 && c.node.StorageNode.Ondemand == true {
+	if len(c.bufConn) == 0 && c.node.logging == false {
 		c.Close()
 	}
 }
@@ -205,7 +205,6 @@ func (c *Console) Start() {
 	c.running = make(chan bool, 0)
 	go c.readTarget()
 	c.node.ready <- true
-	c.node.logging = true
 	c.node.status = STATUS_CONNECTED
 	c.session.Wait()
 	c.session.Close()
