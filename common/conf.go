@@ -7,10 +7,20 @@ import (
 	"strconv"
 )
 
+const (
+	CLIENT_CONGO_TYPE = iota
+	CLIENT_XCAT_TYPE
+)
+
 var (
 	serverConfig *ServerConfig
 	clientConfig *ClientConfig
 	CONF_FILE    string
+
+	CLIENT_TYPE_MAP = map[string]int{
+		"congo": CLIENT_CONGO_TYPE,
+		"xcat":  CLIENT_XCAT_TYPE,
+	}
 )
 
 type ServerConfig struct {
@@ -92,6 +102,7 @@ type ClientConfig struct {
 	ConsolePort    string
 	ConsoleTimeout int
 	ServerHost     string
+	ClientType     int
 }
 
 func NewClientConfig() (*ClientConfig, error) {
@@ -124,6 +135,15 @@ func NewClientConfig() (*ClientConfig, error) {
 	}
 	if os.Getenv("CONGO_SSL_CA_CERT") != "" {
 		clientConfig.SSLCACertFile = os.Getenv("CONGO_SSL_CA_CERT")
+	}
+	clientConfig.ClientType = CLIENT_CONGO_TYPE
+	if os.Getenv("CONGO_CLIENT_TYPE") != "" {
+		var clientType int
+		var ok bool
+		temp := os.Getenv("CONGO_CLIENT_TYPE")
+		if clientType, ok = CLIENT_TYPE_MAP[temp]; ok {
+			clientConfig.ClientType = clientType
+		}
 	}
 	return clientConfig, nil
 }

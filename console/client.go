@@ -98,7 +98,7 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	n, err := c.ReceiveInt(conn)
 	if err != nil {
 		if c.retry == true && c.reported == false {
-			fmt.Printf("\rCould not receive message, error: %s.\r\n", err.Error())
+			printConsoleReceiveErr(err)
 		}
 		c.close()
 		return
@@ -106,7 +106,7 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	b, err = c.ReceiveBytes(conn, n)
 	if err != nil {
 		if c.retry == true && c.reported == false {
-			fmt.Printf("\rCould not receive message, error: %s.\r\n", err.Error())
+			printConsoleReceiveErr(err)
 		}
 		c.close()
 		return
@@ -117,7 +117,7 @@ func (c *ConsoleClient) output(args ...interface{}) {
 		tmp, err := os.Stdout.Write(b)
 		if err != nil {
 			if c.retry == true && c.reported == false {
-				fmt.Printf("\rCould not send message, error: %s.\r\n", err.Error())
+				printConsoleSendErr(err)
 			}
 			c.close()
 			return
@@ -137,29 +137,25 @@ func (c *ConsoleClient) contains(cmds []byte, cmd byte) bool {
 
 func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
 	if cmd == CLIENT_CMD_HELP {
-		fmt.Printf("\r\nHelp message from congo:\r\n" +
-			"Ctrl + e + c + .         Exit from console session  \r\n" +
-			"Ctrl + e + c + ?         Print the help message for console command \r\n" +
-			"Ctrl + e + c + r         Replay last lines \r\n" +
-			"Ctrl + e + c + w         Who is on this session \r\n")
+		printConsoleHelpMsg()
 	} else if cmd == CLIENT_CMD_REPLAY {
 		congo := NewCongoClient(clientConfig.HTTPUrl)
 		ret, err := congo.replay(node)
 		if err != nil {
-			fmt.Printf("Console command err: %s", err.Error())
+			printConsoleCmdErr(err)
 			return
 		}
-		fmt.Printf("\r\n%s\r\n", ret)
+		printConsoleReplay(ret)
 	} else if cmd == CLIENT_CMD_WHO {
 		congo := NewCongoClient(clientConfig.HTTPUrl)
 		users, err := congo.listUser(node)
 		if err != nil {
-			fmt.Printf("Console command err: %s", err.Error())
+			printConsoleCmdErr(err)
 			return
 		}
-		fmt.Printf("\r\n")
+		printCRLF()
 		for _, v := range users["users"].([]interface{}) {
-			fmt.Printf("User: %s\r\n", v.(string))
+			printConsoleUser(v.(string))
 		}
 	}
 }
@@ -241,13 +237,13 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 	m["command"] = COMMAND_START_CONSOLE
 	b, err := json.Marshal(m)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
+		printFatalErr(err)
 		return STATUS_ERROR, err
 	}
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	err = c.SendByteWithLengthTimeout(conn, b, consoleTimeout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
+		printFatalErr(err)
 		return STATUS_ERROR, err
 	}
 	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
@@ -255,7 +251,7 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 		if err == io.EOF && status == STATUS_NOTFOUND {
 			return STATUS_NOTFOUND, nil
 		}
-		fmt.Fprintf(os.Stderr, "Fatal error: %v", err)
+		printFatalErr(err)
 		return STATUS_ERROR, err
 	}
 	return status, nil
@@ -281,7 +277,7 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	}
 	if status != STATUS_CONNECTED {
 		if status == STATUS_NOTFOUND {
-			fmt.Printf("Could not find node %s \n", name)
+			printNodeNotfoundMsg(name)
 			os.Exit(1)
 		}
 		plog.ErrorNode(name, fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
@@ -300,7 +296,7 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 		return "", err
 	}
 	defer common.GetTaskManager().Stop(c.inputTask.GetID())
-	fmt.Printf("[Enter `^Ec?' for help]\r\n")
+	printConsoleHelpPrompt()
 	c.outputTask, err = common.GetTaskManager().RegisterLoop(c.output, conn, recvBuf)
 	if err != nil {
 		return "", err
@@ -316,24 +312,24 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 func (s *ConsoleClient) Connect() (net.Conn, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", s.host, s.port))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		printFatalErr(err)
 		os.Exit(1)
 	}
 	clientConfig := common.GetClientConfig()
 	clientTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	conn, err := net.DialTimeout("tcp", tcpAddr.String(), clientTimeout*time.Second)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
+		printFatalErr(err)
 		os.Exit(1)
 	}
 	err = conn.(*net.TCPConn).SetKeepAlive(true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cloud not make connection keepalive %s\n", err.Error())
+		printFatalErr(err)
 		os.Exit(1)
 	}
 	err = conn.(*net.TCPConn).SetKeepAlivePeriod(30 * time.Second)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Cloud not make connection keepalive %s\n", err.Error())
+		printFatalErr(err)
 		os.Exit(1)
 	}
 	if clientConfig.SSLCertFile != "" && clientConfig.SSLKeyFile != "" && clientConfig.SSLCACertFile != "" {

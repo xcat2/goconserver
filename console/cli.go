@@ -248,8 +248,8 @@ func (c *CongoCli) create(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo create <node> driver=ssh ondemand=true --param key=val,key=val\n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
-		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) || strings.HasPrefix("\\", args[0]) {
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' ,'\\' or '/'\n")
 		os.Exit(1)
 	}
 	attribs, err := KeyValueArrayToMap(args[1:], "=")
@@ -346,8 +346,8 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
 		os.Exit(1)
 	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) {
-		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' or '/'\n")
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) || strings.HasPrefix("\\", args[0]) {
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' ,'\\' or '/'\n")
 		os.Exit(1)
 	}
 	retry := true
