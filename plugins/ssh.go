@@ -110,7 +110,7 @@ func (s *SSHConsole) keepSSHAlive(cl *ssh.Client, conn net.Conn) error {
 	t := time.NewTicker(keepAliveInterval)
 	defer t.Stop()
 	for {
-		plog.DebugNode(s.node, "Keep alive goruntine for ssh connection started")
+		plog.DebugNode(s.node, "Keep alive goroutine for ssh connection started")
 		deadline := time.Now().Add(keepAliveInterval).Add(15 * time.Second)
 		err := conn.SetDeadline(deadline)
 		if err != nil {
@@ -125,7 +125,7 @@ func (s *SSHConsole) keepSSHAlive(cl *ssh.Client, conn net.Conn) error {
 				return common.ErrSendKeepalive
 			}
 		case <-s.exit:
-			plog.Debug("Exit keepalive goroutine")
+			plog.DebugNode(s.node, "Exit keepalive goroutine")
 			return nil
 		}
 	}

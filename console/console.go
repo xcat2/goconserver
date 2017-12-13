@@ -75,7 +75,7 @@ func (c *Console) Disconnect(conn net.Conn) {
 func (c *Console) writeTarget(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to read message from client.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "writeTarget goruntine quit")
+		plog.DebugNode(c.node.StorageNode.Name, "writeTarget goroutine quit")
 		c.Disconnect(conn)
 	}()
 	for {
@@ -113,7 +113,7 @@ func (c *Console) writeTarget(conn net.Conn) {
 func (c *Console) writeClient(conn net.Conn) {
 	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "writeClient goruntine quit")
+		plog.DebugNode(c.node.StorageNode.Name, "writeClient goroutine quit")
 		c.Disconnect(conn)
 	}()
 	var bufChan chan []byte
@@ -148,7 +148,7 @@ func (c *Console) writeClient(conn net.Conn) {
 func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "readTarget goruntine quit")
+		plog.DebugNode(c.node.StorageNode.Name, "readTarget goroutine quit")
 		logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
 		err := c.logger(logFile, []byte("\r\n[goconserver disconnected]\r\n"))
 		if err != nil {
