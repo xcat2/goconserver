@@ -11,6 +11,7 @@ const (
 	DRIVER_SSHCMD = "sshcmd"
 )
 
+// Experimental plugin, just for test
 func init() {
 	DRIVER_INIT_MAP[DRIVER_SSHCMD] = NewSSHCMDConsole
 	DRIVER_VALIDATE_MAP[DRIVER_SSHCMD] = func(name string, params map[string]string) error {

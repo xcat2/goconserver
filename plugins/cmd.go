@@ -42,6 +42,7 @@ func (c *CommondConsole) Start() (*BaseSession, error) {
 	c.command = exec.Command(c.cmd, c.params...)
 	c.pty, err = pty.Start(c.command)
 	if err != nil {
+		plog.ErrorNode(c.node, err.Error())
 		return nil, err
 	}
 	tty := common.Tty{}
@@ -52,6 +53,7 @@ func (c *CommondConsole) Start() (*BaseSession, error) {
 		ttyWidth = 80
 	}
 	if err = tty.SetSize(c.pty, ttyWidth, ttyHeight); err != nil {
+		plog.ErrorNode(c.node, err.Error())
 		return nil, err
 	}
 	return &BaseSession{In: c.pty, Out: c.pty, Session: c}, nil

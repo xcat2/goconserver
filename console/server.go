@@ -131,7 +131,7 @@ func (node *Node) restartConsole() {
 				node.Release(false)
 				break
 			}
-			plog.InfoNode(node.StorageNode.Name, "Restart console session.")
+			plog.DebugNode(node.StorageNode.Name, "Restart console session.")
 			go node.startConsole()
 			common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout)
 			node.Release(false)
@@ -156,7 +156,7 @@ func (node *Node) startConsole() {
 		node.ready <- false
 		if node.StorageNode.Ondemand == false {
 			go func() {
-				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				plog.DebugNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
 					serverConfig.Console.ReconnectInterval, err.Error()))
 				time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 				common.SafeSend(node.reconnect, struct{}{})
@@ -170,7 +170,7 @@ func (node *Node) startConsole() {
 		node.ready <- false
 		if node.StorageNode.Ondemand == false {
 			go func() {
-				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				plog.DebugNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
 					serverConfig.Console.ReconnectInterval, err.Error()))
 				time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
 				common.SafeSend(node.reconnect, struct{}{})
