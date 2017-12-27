@@ -333,8 +333,12 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 		os.Exit(1)
 	}
 	if clientConfig.SSLCertFile != "" && clientConfig.SSLKeyFile != "" && clientConfig.SSLCACertFile != "" {
-		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile, clientConfig.SSLKeyFile,
-			clientConfig.SSLCACertFile, s.host)
+		tlsConfig, err := common.LoadClientTlsConfig(
+			clientConfig.SSLCertFile,
+			clientConfig.SSLKeyFile,
+			clientConfig.SSLCACertFile,
+			s.host,
+			clientConfig.Insecure)
 		if err != nil {
 			panic(err)
 		}
@@ -382,8 +386,12 @@ func NewCongoClient(baseUrl string) *CongoClient {
 	client := &common.HttpClient{Client: &httpClient, Headers: http.Header{}}
 	if strings.HasPrefix(baseUrl, "https") && clientConfig.SSLKeyFile != "" &&
 		clientConfig.SSLCertFile != "" && clientConfig.SSLCACertFile != "" {
-		tlsConfig, err := common.LoadClientTlsConfig(clientConfig.SSLCertFile,
-			clientConfig.SSLKeyFile, clientConfig.SSLCACertFile, clientConfig.ServerHost)
+		tlsConfig, err := common.LoadClientTlsConfig(
+			clientConfig.SSLCertFile,
+			clientConfig.SSLKeyFile,
+			clientConfig.SSLCACertFile,
+			clientConfig.ServerHost,
+			clientConfig.Insecure)
 		if err != nil {
 			panic(err)
 		}

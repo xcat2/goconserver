@@ -164,7 +164,7 @@ func (s *Network) SendByteWithLengthTimeout(conn net.Conn, b []byte, timeout tim
 	return s.ResetWriteTimeout(conn)
 }
 
-func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string) (*tls.Config, error) {
+func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string, insecure bool) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,9 @@ func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, ser
 	tlsConfig := tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, ServerName: serverHost,
 		CipherSuites:             CIPHER_SUITES,
 		MinVersion:               tls.VersionTLS12,
-		PreferServerCipherSuites: true}
+		PreferServerCipherSuites: true,
+		InsecureSkipVerify:       insecure,
+	}
 	tlsConfig.BuildNameToCertificate()
 	return &tlsConfig, nil
 }

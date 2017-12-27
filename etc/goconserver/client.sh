@@ -5,3 +5,4 @@ export CONGO_CONSOLE_TIMEOUT=3
 # export CONGO_SSL_KEY=/root/.congo/client-key.pem
 # export CONGO_SSL_CERT=/root/.congo/client-cred.pem
 # export CONGO_SSL_CA_CERT=/root/.congo/ca.pem
+export CONGO_SSL_INSECURE=false

@@ -21,6 +21,26 @@ var (
 		"congo": CLIENT_CONGO_TYPE,
 		"xcat":  CLIENT_XCAT_TYPE,
 	}
+	FALSE_CONFIG = map[string]bool{
+		"False": false,
+		"FALSE": false,
+		"false": false,
+		"NO":    false,
+		"no":    false,
+		"No":    false,
+		"n":     false,
+		"f":     false,
+	}
+	TRUE_CONFIG = map[string]bool{
+		"TRUE": true,
+		"True": true,
+		"true": true,
+		"t":    true,
+		"YES":  true,
+		"Yes":  true,
+		"yes":  true,
+		"y":    true,
+	}
 )
 
 type ServerConfig struct {
@@ -103,15 +123,18 @@ type ClientConfig struct {
 	ConsoleTimeout int
 	ServerHost     string
 	ClientType     int
+	Insecure       bool
 }
 
 func NewClientConfig() (*ClientConfig, error) {
 	var err error
+	var ok bool
 	clientConfig = new(ClientConfig)
 	clientConfig.HTTPUrl = "http://127.0.0.1:12429"
 	clientConfig.ServerHost = "127.0.0.1"
 	clientConfig.ConsolePort = "12430"
 	clientConfig.ConsoleTimeout = 30
+	clientConfig.Insecure = false
 	if os.Getenv("CONGO_URL") != "" {
 		clientConfig.HTTPUrl = os.Getenv("CONGO_URL")
 	}
@@ -139,11 +162,13 @@ func NewClientConfig() (*ClientConfig, error) {
 	clientConfig.ClientType = CLIENT_CONGO_TYPE
 	if os.Getenv("CONGO_CLIENT_TYPE") != "" {
 		var clientType int
-		var ok bool
 		temp := os.Getenv("CONGO_CLIENT_TYPE")
 		if clientType, ok = CLIENT_TYPE_MAP[temp]; ok {
 			clientConfig.ClientType = clientType
 		}
+	}
+	if _, ok = TRUE_CONFIG[os.Getenv("CONGO_SSL_INSECURE")]; ok {
+		clientConfig.Insecure = true
 	}
 	return clientConfig, nil
 }

@@ -125,8 +125,12 @@ func (cRPCClient *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
 	var err error
 	var conn *grpc.ClientConn
 	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
-		tlsConfig, err := common.LoadClientTlsConfig(serverConfig.Global.SSLCertFile,
-			serverConfig.Global.SSLKeyFile, serverConfig.Global.SSLCACertFile, cRPCClient.host)
+		tlsConfig, err := common.LoadClientTlsConfig(
+			serverConfig.Global.SSLCertFile,
+			serverConfig.Global.SSLKeyFile,
+			serverConfig.Global.SSLCACertFile,
+			cRPCClient.host,
+			false)
 		if err != nil {
 			panic(err)
 		}
