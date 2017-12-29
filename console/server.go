@@ -650,7 +650,7 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 	hostNodes := make(map[string][]string, 0)
 	for _, node = range nodes {
 		if _, ok := nodeWithHost[node]; !ok {
-			plog.ErrorNode(node, "Skip this node as it is not exit.")
+			plog.ErrorNode(node, "Skip this node as it is not exist.")
 			continue
 		}
 		host = nodeWithHost[node]

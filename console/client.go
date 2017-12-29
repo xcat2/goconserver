@@ -85,6 +85,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 		b = []byte(ExitSequence)
 		n = len(b)
 		c.retry = false
+		printConsoleDisconnectPrompt()
 	}
 	if pos >= n {
 		return

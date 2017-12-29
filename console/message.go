@@ -57,3 +57,7 @@ func printConsoleUser(user string) {
 func printFatalErr(err error) {
 	fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 }
+
+func printConsoleDisconnectPrompt() {
+	fmt.Printf("[Disconnected]\r\n")
+}
