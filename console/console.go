@@ -1,14 +1,11 @@
 package console
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	"github.com/chenglch/goconserver/plugins"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -26,7 +23,6 @@ var (
 )
 
 type Console struct {
-	network   *common.Network
 	bufConn   map[net.Conn]chan []byte // build the map for the connection and the channel
 	remoteIn  io.Writer
 	remoteOut io.Reader
@@ -34,6 +30,7 @@ type Console struct {
 	running   chan bool
 	node      *Node
 	mutex     *sync.RWMutex
+	last      *[]byte // the rest of the buffer that has not been emitted
 }
 
 func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
@@ -41,10 +38,11 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 		remoteOut: baseSession.Out,
 		session:   baseSession.Session,
 		node:      node,
-		network:   new(common.Network),
 		bufConn:   make(map[net.Conn]chan []byte),
 		running:   make(chan bool, 0),
-		mutex:     new(sync.RWMutex)}
+		mutex:     new(sync.RWMutex),
+		last:      new([]byte),
+	}
 }
 
 // Accept connection from client
@@ -88,12 +86,12 @@ func (c *Console) writeTarget(conn net.Conn) {
 			return
 		}
 		c.mutex.RUnlock()
-		n, err := c.network.ReceiveInt(conn)
+		n, err := common.Network.ReceiveInt(conn)
 		if err != nil {
 			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message head from client. Error:%s.", err.Error()))
 			return
 		}
-		b, err := c.network.ReceiveBytes(conn, n)
+		b, err := common.Network.ReceiveBytes(conn, n)
 		if err != nil {
 			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
 			return
@@ -126,15 +124,14 @@ func (c *Console) writeClient(conn net.Conn) {
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s\r\n",
 		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), c.node.StorageNode.Name)
-	err := c.network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
+	err := common.Network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
 	if err != nil {
 		plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 		return
 	}
-	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
-	err = c.logger(logFile, []byte(welcome))
+	err = consoleLogger.Prompt(c.node.StorageNode.Name, welcome)
 	if err != nil {
-		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+		plog.DebugNode(c.node.StorageNode.Name, err.Error())
 	}
 	for {
 		c.mutex.RLock()
@@ -145,7 +142,7 @@ func (c *Console) writeClient(conn net.Conn) {
 		}
 		c.mutex.RUnlock()
 		b := <-bufChan
-		err = c.network.SendByteWithLengthTimeout(conn, b, clientTimeout)
+		err = common.Network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
 			plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
@@ -157,20 +154,18 @@ func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
 		plog.DebugNode(c.node.StorageNode.Name, "readTarget goroutine quit")
-		logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
-		err := c.logger(logFile, []byte("\r\n[goconserver disconnected]\r\n"))
+		err := consoleLogger.Prompt(c.node.StorageNode.Name, "[goconserver disconnected]")
 		if err != nil {
-			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+			plog.DebugNode(c.node.StorageNode.Name, err.Error())
 		}
 		c.Stop()
 	}()
 	var err error
 	var n int
 	b := make([]byte, common.BUF_SIZE)
-	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, c.node.StorageNode.Name)
-	err = c.logger(logFile, []byte("\r\n[goconserver connected]\r\n"))
+	err = consoleLogger.Prompt(c.node.StorageNode.Name, "[goconserver connected]")
 	if err != nil {
-		plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+		plog.WarningNode(c.node.StorageNode.Name, err.Error())
 	}
 	for {
 		select {
@@ -189,9 +184,9 @@ func (c *Console) readTarget() {
 		}
 		if n > 0 {
 			c.writeClientChan(b[:n])
-			err = c.logger(logFile, b[:n])
+			consoleLogger.Emit(c.node.StorageNode.Name, b[:n], c.last)
 			if err != nil {
-				plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message to %s. Error:%s", logFile, err.Error()))
+				plog.DebugNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message. Error:%s", err.Error()))
 			}
 		}
 	}
@@ -216,10 +211,17 @@ func (c *Console) Start() {
 	go c.readTarget()
 	c.node.ready <- true
 	c.node.status = STATUS_CONNECTED
+	defer func() {
+		// catch c.session nil pointer
+		if r := recover(); r != nil {
+			plog.WarningNode(c.node.StorageNode.Name, r)
+		}
+	}()
 	c.session.Wait()
 	c.session.Close()
 }
 
+// called from rest api to stop the console session
 func (c *Console) Stop() {
 	c.Close()
 }
@@ -236,83 +238,30 @@ func (c *Console) ListSessionUser() []string {
 	return ret
 }
 
-// close session from rest api
 func (c *Console) Close() {
-	plog.DebugNode(c.node.StorageNode.Name, "Close console session.")
+	if c.session == nil {
+		// may be closed by the other thread
+		return
+	}
 	c.mutex.Lock()
+	// with lock check again
+	if c.session == nil {
+		c.mutex.Unlock()
+		return
+	}
+	plog.DebugNode(c.node.StorageNode.Name, "Close console session.")
 	for k, v := range c.bufConn {
 		close(v)
 		k.Close()
 		delete(c.bufConn, k)
 	}
-	c.mutex.Unlock()
 	if c.running != nil {
-		c.mutex.Lock()
-		if c.running != nil {
-			close(c.running)
-			c.running = nil
-		}
-		c.mutex.Unlock()
+		close(c.running)
+		c.running = nil
 	}
 	c.node.status = STATUS_AVAIABLE
 	c.node.console = nil
 	c.session.Close()
-}
-
-func (c *Console) insertStamp(in []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	var err error
-	nextLine := false
-	for i := 1; i < len(in); i++ {
-		if in[i-1] == '\r' && in[i] == '\n' {
-			_, err = buf.WriteString("\r\n[" + time.Now().Format("2006-01-02 15:04:05") + "]")
-			if err != nil {
-				return nil, err
-			}
-			i++
-			nextLine = true
-			continue
-		}
-		nextLine = false
-		err = buf.WriteByte(in[i-1])
-		if err != nil {
-			return nil, err
-		}
-	}
-	if nextLine == false {
-		err = buf.WriteByte(in[len(in)-1])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return buf.Bytes(), nil
-}
-
-func (c *Console) logger(path string, b []byte) error {
-	if path != "" {
-		var err error
-		fd, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			plog.ErrorNode(c.node.StorageNode.Name, err)
-			return err
-		}
-		defer fd.Close()
-		if serverConfig.Console.LogTimestamp {
-			b, err = c.insertStamp(b)
-			if err != nil {
-				plog.ErrorNode(c.node.StorageNode.Name, err)
-				return err
-			}
-		}
-		l := len(b)
-		for l > 0 {
-			n, err := fd.Write(b)
-			if err != nil {
-				plog.ErrorNode(c.node.StorageNode.Name, err)
-				return err
-			}
-			l -= n
-		}
-	}
-	return nil
+	c.session = nil
+	c.mutex.Unlock()
 }

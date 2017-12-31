@@ -155,9 +155,7 @@ func (s *SSHConsole) connectToHost() error {
 	go s.keepSSHAlive(s.client, conn)
 	s.session, err = s.client.NewSession()
 	if err != nil {
-		common.SafeClose(s.exit)
-		s.client.Close()
-		s.client = nil
+		s.Close()
 		return err
 	}
 	return nil

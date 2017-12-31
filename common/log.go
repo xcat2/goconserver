@@ -104,6 +104,7 @@ func (l *Logger) HandleHttp(w http.ResponseWriter, req *http.Request, code int, 
 	if msg != "" {
 		l.plog.WithFields(l.fileinfo()).Error(msg)
 		w.WriteHeader(code)
+		fmt.Fprintf(w, "%s\n", msg)
 	} else {
 		l.plog.WithFields(l.fileinfo()).Info("OK")
 		w.WriteHeader(http.StatusOK)

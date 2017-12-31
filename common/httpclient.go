@@ -56,8 +56,10 @@ func (s *HttpClient) Request(method string, url string, params *url.Values, head
 		if err2 == nil {
 			PrintJson(rbody)
 		}
+		if rbody != nil {
+			return rbody, err
+		}
 		return nil, err
-
 	}
 	rbody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {

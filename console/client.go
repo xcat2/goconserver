@@ -18,7 +18,6 @@ import (
 )
 
 type ConsoleClient struct {
-	common.Network
 	host, port string
 	origState  *terminal.State
 	escape     int // client exit signal
@@ -90,13 +89,13 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	if pos >= n {
 		return
 	}
-	c.SendByteWithLength(conn.(net.Conn), b[pos:n])
+	common.Network.SendByteWithLength(conn.(net.Conn), b[pos:n])
 }
 
 func (c *ConsoleClient) output(args ...interface{}) {
 	b := args[0].([]interface{})[1].([]byte)
 	conn := args[0].([]interface{})[0].(net.Conn)
-	n, err := c.ReceiveInt(conn)
+	n, err := common.Network.ReceiveInt(conn)
 	if err != nil {
 		if c.retry == true && c.reported == false {
 			printConsoleReceiveErr(err)
@@ -104,7 +103,7 @@ func (c *ConsoleClient) output(args ...interface{}) {
 		c.close()
 		return
 	}
-	b, err = c.ReceiveBytes(conn, n)
+	b, err = common.Network.ReceiveBytes(conn, n)
 	if err != nil {
 		if c.retry == true && c.reported == false {
 			printConsoleReceiveErr(err)
@@ -143,19 +142,27 @@ func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
 		congo := NewCongoClient(clientConfig.HTTPUrl)
 		ret, err := congo.replay(node)
 		if err != nil {
-			printConsoleCmdErr(err)
+			if ret != "" {
+				printConsoleCmdErr(ret)
+			} else {
+				printConsoleCmdErr(err)
+			}
 			return
 		}
 		printConsoleReplay(ret)
 	} else if cmd == CLIENT_CMD_WHO {
 		congo := NewCongoClient(clientConfig.HTTPUrl)
-		users, err := congo.listUser(node)
+		ret, err := congo.listUser(node)
 		if err != nil {
-			printConsoleCmdErr(err)
+			if ret != nil {
+				printConsoleCmdErr(ret)
+			} else {
+				printConsoleCmdErr(err)
+			}
 			return
 		}
 		printCRLF()
-		for _, v := range users["users"].([]interface{}) {
+		for _, v := range ret["users"].([]interface{}) {
 			printConsoleUser(v.(string))
 		}
 	}
@@ -242,12 +249,12 @@ func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
 		return STATUS_ERROR, err
 	}
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
-	err = c.SendByteWithLengthTimeout(conn, b, consoleTimeout)
+	err = common.Network.SendByteWithLengthTimeout(conn, b, consoleTimeout)
 	if err != nil {
 		printFatalErr(err)
 		return STATUS_ERROR, err
 	}
-	status, err := c.ReceiveIntTimeout(conn, consoleTimeout)
+	status, err := common.Network.ReceiveIntTimeout(conn, consoleTimeout)
 	if err != nil {
 		if err == io.EOF && status == STATUS_NOTFOUND {
 			return STATUS_NOTFOUND, nil
@@ -265,11 +272,11 @@ func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
 	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
 	status, err := c.tryConnect(conn, name)
 	if status == STATUS_REDIRECT {
-		n, err := c.ReceiveIntTimeout(conn, consoleTimeout)
+		n, err := common.Network.ReceiveIntTimeout(conn, consoleTimeout)
 		if err != nil {
 			return "", err
 		}
-		b, err := c.ReceiveBytesTimeout(conn, n, consoleTimeout)
+		b, err := common.Network.ReceiveBytesTimeout(conn, n, consoleTimeout)
 		if err != nil && err != io.EOF {
 			return "", err
 		}
@@ -464,6 +471,9 @@ func (c *CongoClient) replay(node string) (string, error) {
 	url := fmt.Sprintf("%s/command/replay/%s", c.baseUrl, node)
 	ret, err := c.client.Get(url, nil, nil, true)
 	if err != nil {
+		if ret != nil {
+			return string(ret.([]byte)), err
+		}
 		return "", err
 	}
 	return string(ret.([]byte)), nil

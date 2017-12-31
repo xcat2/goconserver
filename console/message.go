@@ -34,12 +34,19 @@ func printConsoleHelpMsg() {
 	fmt.Printf("\r\nHelp message from congo:\r\n" +
 		"Ctrl + e + c + .         Exit from console session  \r\n" +
 		"Ctrl + e + c + ?         Print the help message for console command \r\n" +
-		"Ctrl + e + c + r         Replay last lines \r\n" +
+		"Ctrl + e + c + r         Replay last lines (only for file_logger) \r\n" +
 		"Ctrl + e + c + w         Who is on this session \r\n")
 }
 
-func printConsoleCmdErr(err error) {
-	fmt.Printf("Console command err: %s", err.Error())
+func printConsoleCmdErr(msg interface{}) {
+	switch t := msg.(type) {
+	case string:
+		fmt.Printf("\r\nConsole command err: %s\r\n", t)
+	case error:
+		fmt.Printf("\r\nConsole command err: %s\r\n", t.Error())
+	default:
+		fmt.Printf("\r\nConsole command err: unexpeted type\r\n")
+	}
 }
 
 func printConsoleReplay(replay string) {

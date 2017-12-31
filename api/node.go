@@ -79,6 +79,7 @@ func (api *NodeApi) show(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "%s\n", resp)
 }
 
+// change the logging state for one node
 func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))
@@ -95,6 +96,7 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// change the logging state for nodes
 func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	plog.Debug(fmt.Sprintf("Receive %s request %s %v from %s.", req.Method, req.URL.Path, vars, req.RemoteAddr))

@@ -31,12 +31,13 @@ var (
 		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
 		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
 	}
+	Network = new(network)
 )
 
-type Network struct {
+type network struct {
 }
 
-func (s *Network) ReceiveInt(conn net.Conn) (int, error) {
+func (self *network) ReceiveInt(conn net.Conn) (int, error) {
 	b := make([]byte, 4)
 	n := 0
 	for n < 4 {
@@ -52,7 +53,7 @@ func (s *Network) ReceiveInt(conn net.Conn) (int, error) {
 	return BytesToInt(b), nil
 }
 
-func (s *Network) ReceiveIntTimeout(conn net.Conn, timeout time.Duration) (int, error) {
+func (self *network) ReceiveIntTimeout(conn net.Conn, timeout time.Duration) (int, error) {
 	b := make([]byte, 4)
 	n := 0
 	for n < 4 {
@@ -68,13 +69,13 @@ func (s *Network) ReceiveIntTimeout(conn net.Conn, timeout time.Duration) (int, 
 		}
 		n += tmp
 	}
-	if err := s.ResetReadTimeout(conn); err != nil {
+	if err := self.ResetReadTimeout(conn); err != nil {
 		return BytesToInt(b), err
 	}
 	return BytesToInt(b), nil
 }
 
-func (s *Network) ReceiveBytes(conn net.Conn, size int) ([]byte, error) {
+func (self *network) ReceiveBytes(conn net.Conn, size int) ([]byte, error) {
 	b := make([]byte, size)
 	n := 0
 	for n < size {
@@ -87,7 +88,7 @@ func (s *Network) ReceiveBytes(conn net.Conn, size int) ([]byte, error) {
 	return b, nil
 }
 
-func (s *Network) ReceiveBytesTimeout(conn net.Conn, size int, timeout time.Duration) ([]byte, error) {
+func (self *network) ReceiveBytesTimeout(conn net.Conn, size int, timeout time.Duration) ([]byte, error) {
 	b := make([]byte, size)
 	n := 0
 	for n < size {
@@ -100,27 +101,27 @@ func (s *Network) ReceiveBytesTimeout(conn net.Conn, size int, timeout time.Dura
 		}
 		n += tmp
 	}
-	if err := s.ResetReadTimeout(conn); err != nil {
+	if err := self.ResetReadTimeout(conn); err != nil {
 		return b, err
 	}
 	return b, nil
 }
 
-func (s *Network) ResetReadTimeout(conn net.Conn) error {
+func (self *network) ResetReadTimeout(conn net.Conn) error {
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Network) ResetWriteTimeout(conn net.Conn) error {
+func (self *network) ResetWriteTimeout(conn net.Conn) error {
 	if err := conn.SetWriteDeadline(time.Time{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Network) SendBytes(conn net.Conn, b []byte) error {
+func (self *network) SendBytes(conn net.Conn, b []byte) error {
 	n := 0
 	for n < len(b) {
 		tmp, err := conn.Write(b[n:])
@@ -132,36 +133,46 @@ func (s *Network) SendBytes(conn net.Conn, b []byte) error {
 	return nil
 }
 
-func (s *Network) SendInt(conn net.Conn, num int) error {
+func (self *network) SendInt(conn net.Conn, num int) error {
 	b := IntToBytes(num)
-	return s.SendBytes(conn, b)
+	return self.SendBytes(conn, b)
 }
 
-func (s *Network) SendIntWithTimeout(conn net.Conn, num int, timeout time.Duration) error {
+func (self *network) SendIntWithTimeout(conn net.Conn, num int, timeout time.Duration) error {
 	if err := conn.SetWriteDeadline(time.Now().Add(timeout * time.Second)); err != nil {
 		return err
 	}
 	b := IntToBytes(num)
-	if err := s.SendBytes(conn, b); err != nil {
+	if err := self.SendBytes(conn, b); err != nil {
 		return err
 	}
-	return s.ResetWriteTimeout(conn)
+	return self.ResetWriteTimeout(conn)
 }
 
-func (s *Network) SendByteWithLength(conn net.Conn, b []byte) error {
+func (self *network) SendBytesWithTimeout(conn net.Conn, b []byte, timeout time.Duration) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout * time.Second)); err != nil {
+		return err
+	}
+	if err := self.SendBytes(conn, b); err != nil {
+		return err
+	}
+	return self.ResetWriteTimeout(conn)
+}
+
+func (self *network) SendByteWithLength(conn net.Conn, b []byte) error {
 	lenBytes := IntToBytes(len(b))
 	b = append(lenBytes, b...)
-	return s.SendBytes(conn, b)
+	return self.SendBytes(conn, b)
 }
 
-func (s *Network) SendByteWithLengthTimeout(conn net.Conn, b []byte, timeout time.Duration) error {
+func (self *network) SendByteWithLengthTimeout(conn net.Conn, b []byte, timeout time.Duration) error {
 	if err := conn.SetWriteDeadline(time.Now().Add(timeout * time.Second)); err != nil {
 		return err
 	}
-	if err := s.SendByteWithLength(conn, b); err != nil {
+	if err := self.SendByteWithLength(conn, b); err != nil {
 		return err
 	}
-	return s.ResetWriteTimeout(conn)
+	return self.ResetWriteTimeout(conn)
 }
 
 func LoadClientTlsConfig(certPath string, keyPath string, caCertPath string, serverHost string, insecure bool) (*tls.Config, error) {

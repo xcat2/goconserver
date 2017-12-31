@@ -9,7 +9,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"net"
-	"path/filepath"
 )
 
 type ConsoleRPCServer struct {
@@ -62,10 +61,9 @@ func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb
 		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
 		return nil, common.ErrNodeNotExist
 	}
-	logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, rpcNode.Name)
-	content, err := common.ReadTail(logFile, serverConfig.Console.ReplayLines)
+	// TODO: make ReplayLines more flexible
+	content, err := consoleLogger.Fetch(rpcNode.Name, serverConfig.Console.ReplayLines)
 	if err != nil {
-		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Could not read log file %s", logFile))
 		return nil, err
 	}
 	return &pb.ReplayContent{Content: content}, nil

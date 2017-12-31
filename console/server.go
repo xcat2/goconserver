@@ -3,16 +3,16 @@ package console
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pb "github.com/chenglch/goconserver/console/consolepb"
+	"github.com/chenglch/goconserver/console/logger"
 	"github.com/chenglch/goconserver/plugins"
 	"github.com/chenglch/goconserver/storage"
-
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -33,10 +33,11 @@ const (
 )
 
 var (
-	plog         = common.GetLogger("github.com/chenglch/goconserver/service")
-	nodeManager  *NodeManager
-	serverConfig = common.GetServerConfig()
-	STATUS_MAP   = map[int]string{
+	plog          = common.GetLogger("github.com/chenglch/goconserver/service")
+	nodeManager   *NodeManager
+	serverConfig  = common.GetServerConfig()
+	consoleLogger logger.Logger
+	STATUS_MAP    = map[int]string{
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
 		STATUS_CONNECTED: "connected",
@@ -260,7 +261,6 @@ func (node *Node) Release(share bool) error {
 }
 
 type ConsoleServer struct {
-	common.Network
 	host, port string
 }
 
@@ -273,12 +273,12 @@ func (c *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
 	var node, command string
 	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	size, err := c.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
+	size, err := common.Network.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
 	if err != nil {
 		conn.(net.Conn).Close()
 		return "", ""
 	}
-	b, err := c.ReceiveBytesTimeout(conn.(net.Conn), size, clientTimeout)
+	b, err := common.Network.ReceiveBytesTimeout(conn.(net.Conn), size, clientTimeout)
 	if err != nil {
 		return "", ""
 	}
@@ -286,7 +286,7 @@ func (c *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
 	data := make(map[string]string)
 	if err := json.Unmarshal(b, &data); err != nil {
 		plog.Error(err)
-		err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+		err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 		if err != nil {
 			plog.Error(err)
 		}
@@ -309,19 +309,19 @@ func (c *ConsoleServer) redirect(conn interface{}, node string) {
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	if _, ok := nodeWithHost[node]; !ok {
 		plog.ErrorNode(node, "Could not find this node.")
-		err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
+		err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
 		if err != nil {
 			plog.ErrorNode(node, err)
 		}
 		return
 	}
 	host := nodeWithHost[node]
-	err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
+	err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
 	if err != nil {
 		plog.ErrorNode(node, err)
 		return
 	}
-	err = c.SendByteWithLength(conn.(net.Conn), []byte(host))
+	err = common.Network.SendByteWithLength(conn.(net.Conn), []byte(host))
 	if err != nil {
 		plog.ErrorNode(node, err)
 		return
@@ -343,7 +343,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		defer conn.(net.Conn).Close()
 		if !nodeManager.stor.SupportWatcher() {
 			plog.ErrorNode(name, "Could not find this node.")
-			err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
+			err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(name, err)
 			}
@@ -361,7 +361,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		if node.status != STATUS_CONNECTED {
 			if err = node.RequireLock(false); err != nil {
 				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-				err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+				err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 				if err != nil {
 					plog.ErrorNode(name, err)
 				}
@@ -375,7 +375,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 				if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 					node.Release(false)
-					err = c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+					err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 					if err != nil {
 						plog.ErrorNode(name, err)
 					}
@@ -388,7 +388,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 		if node.status == STATUS_CONNECTED {
 			plog.InfoNode(node.StorageNode.Name, "Register client connection successfully.")
 			// reply success message to the client
-			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
+			err := common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(name, err)
 				conn.(net.Conn).Close()
@@ -396,7 +396,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			}
 			node.console.Accept(conn.(net.Conn))
 		} else {
-			err := c.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
+			err := common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
 			if err != nil {
 				plog.ErrorNode(name, err)
 				conn.(net.Conn).Close()
@@ -484,6 +484,13 @@ func GetNodeManager() *NodeManager {
 		nodeManager.stor = stor
 		nodeManager.stor.ImportNodes()
 		nodeManager.fromStorNodes()
+		if _, ok := logger.LOGGER_INIT_MAP[serverConfig.Console.LoggerType]; !ok {
+			panic(errors.New(fmt.Sprintf("The logger type %s is not supported", serverConfig.Console.LoggerType)))
+		}
+		consoleLogger, err = logger.LOGGER_INIT_MAP[serverConfig.Console.LoggerType]()
+		if err != nil {
+			panic(err)
+		}
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
 		nodeManager.initNodes()
 		go nodeManager.PersistWatcher()
@@ -843,13 +850,13 @@ func (m *NodeManager) Replay(name string) (string, int, string) {
 	var content string
 	var err error
 	if !m.stor.SupportWatcher() {
-		if !nodeManager.Exists(name) {
+		if !m.Exists(name) {
 			return "", http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
-		logFile := fmt.Sprintf("%s%c%s.log", serverConfig.Console.LogDir, filepath.Separator, name)
-		content, err = common.ReadTail(logFile, serverConfig.Console.ReplayLines)
+		// TODO: make replaylines more flexible
+		content, err = consoleLogger.Fetch(name, serverConfig.Console.ReplayLines)
 		if err != nil {
-			return "", http.StatusInternalServerError, fmt.Sprintf("Could not read log file %s", logFile)
+			return "", http.StatusInternalServerError, err.Error()
 		}
 	} else {
 		nodeWithHost := m.stor.ListNodeWithHost()

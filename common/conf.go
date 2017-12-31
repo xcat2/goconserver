@@ -61,13 +61,30 @@ type ServerConfig struct {
 	Console struct {
 		Port              string `yaml:"port"`
 		DataDir           string `yaml:"datadir"`
-		LogDir            string `yaml:"logdir"`
 		LogTimestamp      bool   `yaml:"log_timestamp"`
 		ReplayLines       int    `yaml:"replay_lines"`
 		ClientTimeout     int    `yaml:"client_timeout"`
 		TargetTimeout     int    `yaml:"target_timeout"`
 		ReconnectInterval int    `yaml:"reconnect_interval"`
 		RPCPort           string `yaml:"rpcport"`
+		LoggerType        string `yaml:"logger_type"`
+		FileLogger        struct {
+			LogDir string `yaml:"logdir"`
+		} `yaml:"file_logger"`
+		TCPLogger struct {
+			Host          string `yaml:"host"`
+			Port          string `ymal:"port"`
+			Timeout       int    `yaml:"timeout"`
+			SSLKeyFile    string `yaml:"ssl_key_file"`
+			SSLCertFile   string `yaml:"ssl_cert_file"`
+			SSLCACertFile string `yaml:"ssl_ca_cert_file"`
+			SSLInsecure   bool   `yaml:"ssl_insecure"`
+		} `yaml:"tcp_logger"`
+		UDPLogger struct {
+			Host    string `yaml:"host"`
+			Port    string `yaml:"port"`
+			Timeout int    `yaml:"timeout"`
+		} `yaml:"udp_logger"`
 	}
 	Etcd struct {
 		DailTimeout     int    `yaml:"dail_timeout"`
@@ -87,13 +104,26 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.API.HttpTimeout = 10
 	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
-	serverConfig.Console.LogDir = "/var/log/goconserver/nodes/"
 	serverConfig.Console.LogTimestamp = true
 	serverConfig.Console.ReplayLines = 30
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
 	serverConfig.Console.ReconnectInterval = 5
 	serverConfig.Console.RPCPort = "12431" // only for async storage type
+
+	serverConfig.Console.LoggerType = "file_logger"
+	serverConfig.Console.FileLogger.LogDir = "/var/log/goconserver/nodes/"
+	// tcp_logger
+	serverConfig.Console.TCPLogger.Host = "127.0.0.1"
+	serverConfig.Console.TCPLogger.Port = "9564"
+	serverConfig.Console.TCPLogger.Timeout = 5
+	serverConfig.Console.TCPLogger.SSLInsecure = false
+
+	// udp_logger
+	serverConfig.Console.UDPLogger.Host = "127.0.0.1"
+	serverConfig.Console.UDPLogger.Port = "9564"
+	serverConfig.Console.UDPLogger.Timeout = 5
+
 	serverConfig.Etcd.DailTimeout = 5
 	serverConfig.Etcd.RequestTimeout = 2
 	serverConfig.Etcd.Endpoints = "127.0.0.1:2379"

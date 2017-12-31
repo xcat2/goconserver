@@ -46,7 +46,7 @@ func WriteJsonFile(filepath string, data []byte) (err error) {
 	if err != nil {
 		return err
 	}
-	out.WriteTo(f)
+	_, err = out.WriteTo(f)
 	defer f.Close()
 	return
 }
@@ -54,7 +54,10 @@ func WriteJsonFile(filepath string, data []byte) (err error) {
 func PrintJson(b []byte) {
 	var out bytes.Buffer
 	json.Indent(&out, b, "", "\t")
-	out.WriteTo(os.Stdout)
+	_, err := out.WriteTo(os.Stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to print json data, Error:%s\n", err.Error())
+	}
 	fmt.Printf("\n")
 }
 

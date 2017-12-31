@@ -22,6 +22,7 @@ const (
 	ETCD_NOT_INIT
 	SET_DEADLINE_ERROR
 	SEND_KEEPALIVE_ERROR
+	LOGGER_TYPE_ERROR
 
 	// error message
 	STRING_NOT_EXIST         = "Not exist"
@@ -39,6 +40,7 @@ const (
 	STRING_ALREADY_EXIST     = "Already exit"
 	STRING_OUTOF_QUOTA       = "Out of quota"
 	STRING_TIMEOUT           = "Timeout"
+	STRING_LOGGER_TYPE_ERROR = "Invalid logger type"
 
 	STRING_NOT_TERMINAL  = "Not terminal"
 	STRING_INVALID_TYPE  = "Invalid type"
@@ -64,6 +66,7 @@ var (
 	ErrAlreadyExist     = NewErr(ALREADY_EXIST, STRING_ALREADY_EXIST)
 	ErrOutOfQuota       = NewErr(OUTOF_QUATA, STRING_OUTOF_QUOTA)
 	ErrTimeout          = NewErr(TIMEOUT, STRING_TIMEOUT)
+	ErrLoggerType       = NewErr(LOGGER_TYPE_ERROR, STRING_LOGGER_TYPE_ERROR)
 
 	ErrNotTerminal = NewErr(NOT_TERMINAL, STRING_NOT_TERMINAL)
 	ErrInvalidType = NewErr(INVALID_TYPE, STRING_INVALID_TYPE)
