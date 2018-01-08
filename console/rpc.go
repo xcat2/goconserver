@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pb "github.com/chenglch/goconserver/console/consolepb"
+	google_protobuf "github.com/golang/protobuf/ptypes/empty"
 	net_context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -21,7 +22,7 @@ func newConsoleRPCServer() *ConsoleRPCServer {
 	return &ConsoleRPCServer{port: serverConfig.Console.RPCPort, host: serverConfig.Global.Host}
 }
 
-func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
+func (self *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
 	plog.Debug("Receive the RPC call ShowNode")
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
@@ -39,7 +40,7 @@ func (s *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeNam
 	return &retNode, nil
 }
 
-func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae *pb.NodesState) (*pb.Result, error) {
+func (self *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae *pb.NodesState) (*pb.Result, error) {
 	plog.Debug("Receive the RPC call SetConsoleState")
 	nodeManager.RWlock.RLock()
 	names := make([]string, 0, len(pbNodesStae.Names))
@@ -55,7 +56,7 @@ func (s *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae 
 	return &pb.Result{Result: result}, nil
 }
 
-func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
+func (self *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
 	plog.Debug("Receive the RPC call GetReplayContent")
 	if !nodeManager.Exists(rpcNode.Name) {
 		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
@@ -69,7 +70,7 @@ func (s *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb
 	return &pb.ReplayContent{Content: content}, nil
 }
 
-func (s *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.SessionUsers, error) {
+func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.SessionUsers, error) {
 	plog.Debug("Receive the RPC call ListSessionUser")
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
@@ -83,7 +84,18 @@ func (s *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.
 	return &pb.SessionUsers{Users: users}, nil
 }
 
-func (cRPCServer *ConsoleRPCServer) serve() {
+func (self *ConsoleRPCServer) ListNodesStatus(ctx net_context.Context, empty *google_protobuf.Empty) (*pb.NodesStatus, error) {
+	plog.Debug("Receive the RPC call ListNodesStatus")
+	nodesStatus := make(map[string]int32)
+	nodeManager.RWlock.RLock()
+	for name, node := range nodeManager.Nodes {
+		nodesStatus[name] = int32(node.status)
+	}
+	nodeManager.RWlock.RUnlock()
+	return &pb.NodesStatus{NodesStatus: nodesStatus}, nil
+}
+
+func (self *ConsoleRPCServer) serve() {
 	var creds credentials.TransportCredentials
 	var err error
 	var s *grpc.Server
@@ -95,7 +107,7 @@ func (cRPCServer *ConsoleRPCServer) serve() {
 		}
 		creds = credentials.NewTLS(tlsConfig)
 	}
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", cRPCServer.host, cRPCServer.port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", self.host, self.port))
 	if err != nil {
 		panic(err)
 	}
@@ -104,8 +116,8 @@ func (cRPCServer *ConsoleRPCServer) serve() {
 	} else {
 		s = grpc.NewServer()
 	}
-	pb.RegisterConsoleManagerServer(s, cRPCServer)
-	plog.Debug(fmt.Sprintf("Rpc server is listening on %s:%s", cRPCServer.host, cRPCServer.port))
+	pb.RegisterConsoleManagerServer(s, self)
+	plog.Debug(fmt.Sprintf("Rpc server is listening on %s:%s", self.host, self.port))
 	go s.Serve(lis)
 }
 
@@ -118,7 +130,7 @@ func newConsoleRPCClient(host string, port string) *ConsoleRPCClient {
 	return &ConsoleRPCClient{host: host, port: port}
 }
 
-func (cRPCClient *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
+func (self *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	var conn *grpc.ClientConn
@@ -127,14 +139,14 @@ func (cRPCClient *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
 			serverConfig.Global.SSLCertFile,
 			serverConfig.Global.SSLKeyFile,
 			serverConfig.Global.SSLCACertFile,
-			cRPCClient.host,
+			self.host,
 			false)
 		if err != nil {
 			panic(err)
 		}
 		creds = credentials.NewTLS(tlsConfig)
 	}
-	addr := fmt.Sprintf("%s:%s", cRPCClient.host, cRPCClient.port)
+	addr := fmt.Sprintf("%s:%s", self.host, self.port)
 	if creds != nil {
 		conn, err = grpc.Dial(addr, grpc.WithTransportCredentials(creds))
 	} else {
@@ -148,8 +160,8 @@ func (cRPCClient *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func (cRPCClient *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
-	conn, err := cRPCClient.connect()
+func (self *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
+	conn, err := self.connect()
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +175,8 @@ func (cRPCClient *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
 	return node, nil
 }
 
-func (cRPCClient *ConsoleRPCClient) SetConsoleState(names []string, state string) (map[string]string, error) {
-	conn, err := cRPCClient.connect()
+func (self *ConsoleRPCClient) SetConsoleState(names []string, state string) (map[string]string, error) {
+	conn, err := self.connect()
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +190,8 @@ func (cRPCClient *ConsoleRPCClient) SetConsoleState(names []string, state string
 	return pbResult.Result, nil
 }
 
-func (cRPCClient *ConsoleRPCClient) GetReplayContent(name string) (string, error) {
-	conn, err := cRPCClient.connect()
+func (self *ConsoleRPCClient) GetReplayContent(name string) (string, error) {
+	conn, err := self.connect()
 	if err != nil {
 		return "", err
 	}
@@ -193,8 +205,8 @@ func (cRPCClient *ConsoleRPCClient) GetReplayContent(name string) (string, error
 	return pbResult.Content, nil
 }
 
-func (cRPCClient *ConsoleRPCClient) ListSessionUser(name string) ([]string, error) {
-	conn, err := cRPCClient.connect()
+func (self *ConsoleRPCClient) ListSessionUser(name string) ([]string, error) {
+	conn, err := self.connect()
 	if err != nil {
 		return nil, err
 	}
@@ -206,4 +218,24 @@ func (cRPCClient *ConsoleRPCClient) ListSessionUser(name string) ([]string, erro
 		return nil, err
 	}
 	return pbResult.Users, nil
+}
+
+func (self *ConsoleRPCClient) ListNodesStatus() (map[string]int, error) {
+	conn, err := self.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	c := pb.NewConsoleManagerClient(conn)
+	empty := new(google_protobuf.Empty)
+	pbResult, err := c.ListNodesStatus(context.Background(), empty)
+	if err != nil {
+		plog.Error(err)
+		return nil, err
+	}
+	ret := make(map[string]int)
+	for k, v := range pbResult.NodesStatus {
+		ret[k] = int(v)
+	}
+	return ret, nil
 }

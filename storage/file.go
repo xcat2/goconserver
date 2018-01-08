@@ -39,7 +39,7 @@ func newFileStorage() StorInterface {
 	return fileStor
 }
 
-func (s *FileStorage) ImportNodes() {
+func (self *FileStorage) ImportNodes() {
 	nodeConfigFile = path.Join(serverConfig.Console.DataDir, "nodes.json")
 	useBackup := false
 	if ok, _ := common.PathExists(nodeConfigFile); ok {
@@ -48,7 +48,7 @@ func (s *FileStorage) ImportNodes() {
 			plog.Error(fmt.Sprintf("Could not read node configration file %s.", nodeConfigFile))
 			useBackup = true
 		}
-		if err := json.Unmarshal(bytes, &s.Nodes); err != nil {
+		if err := json.Unmarshal(bytes, &self.Nodes); err != nil {
 			plog.Error(fmt.Sprintf("Could not parse node configration file %s.", nodeConfigFile))
 			useBackup = true
 		}
@@ -66,7 +66,7 @@ func (s *FileStorage) ImportNodes() {
 			plog.Error(fmt.Sprintf("Could not read nonde backup file %s.", nodeBackupFile))
 			return
 		}
-		if err := json.Unmarshal(bytes, &s.Nodes); err != nil {
+		if err := json.Unmarshal(bytes, &self.Nodes); err != nil {
 			plog.Error(fmt.Sprintf("Could not parse node backup file %s.", nodeBackupFile))
 			return
 		}
@@ -82,24 +82,24 @@ func (s *FileStorage) ImportNodes() {
 	}
 }
 
-func (s *FileStorage) NotifyPersist(nodes interface{}, action int) {
+func (self *FileStorage) NotifyPersist(nodes interface{}, action int) {
 	if reflect.TypeOf(nodes).Kind() == reflect.Map {
-		s.Nodes = nodes.(map[string]*Node)
-		common.Notify(s.pending, &s.persistence, 1)
+		self.Nodes = nodes.(map[string]*Node)
+		common.Notify(self.pending, &self.persistence, 1)
 	} else {
 		plog.Error("Undefine persistance type")
 	}
 }
 
 // a separate thread to save the data, avoid of frequent IO
-func (s *FileStorage) PersistWatcher(eventChan chan map[int][]byte) {
-	common.Wait(s.pending, &s.persistence, 0, s.save)
+func (self *FileStorage) PersistWatcher(eventChan chan map[int][]byte) {
+	common.Wait(self.pending, &self.persistence, 0, self.save)
 }
 
-func (s *FileStorage) save() {
+func (self *FileStorage) save() {
 	var data []byte
 	var err error
-	if data, err = json.Marshal(s.Nodes); err != nil {
+	if data, err = json.Marshal(self.Nodes); err != nil {
 		plog.Error(fmt.Sprintf("Could not Marshal the node map: %s.", err))
 		panic(err)
 	}
@@ -126,10 +126,14 @@ func (s *FileStorage) save() {
 	}()
 }
 
-func (s *FileStorage) SupportWatcher() bool {
+func (self *FileStorage) SupportWatcher() bool {
 	return false
 }
 
-func (s *FileStorage) ListNodeWithHost() map[string]string {
+func (self *FileStorage) ListNodeWithHost() map[string]string {
+	return nil
+}
+
+func (self *FileStorage) GetHosts() []string {
 	return nil
 }

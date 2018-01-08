@@ -1,16 +1,22 @@
 syntax = "proto3";
 
 package consolepb;
+import "google/protobuf/empty.proto";
 
 service ConsoleManager {
   rpc ShowNode (NodeName) returns (Node) {};
   rpc SetConsoleState (NodesState) returns (Result) {};
   rpc GetReplayContent (NodeName) returns (ReplayContent) {};
   rpc ListSessionUser (NodeName) returns (SessionUsers) {};
+  rpc ListNodesStatus (google.protobuf.Empty) returns (NodesStatus) {};
 }
 
 message NodeName {
   string name = 1;
+}
+
+message NodesStatus {
+  map<string, int32> nodesStatus = 1;
 }
 
 message Node {

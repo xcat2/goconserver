@@ -50,8 +50,8 @@ func newEtcdStorage() StorInterface {
 	return etcdStor
 }
 
-func (s *EtcdStorage) register() error {
-	cli, err := s.getClient()
+func (self *EtcdStorage) register() error {
+	cli, err := self.getClient()
 	if err != nil {
 		return err
 	}
@@ -62,8 +62,8 @@ func (s *EtcdStorage) register() error {
 		plog.Error(fmt.Sprintf("Could not request lease from etcd, error: %s", err))
 		return err
 	}
-	key := fmt.Sprintf("/goconserver/hosts/%s", s.host)
-	_, err = cli.Put(context.TODO(), key, s.host, clientv3.WithLease(resp.ID))
+	key := fmt.Sprintf("/goconserver/hosts/%s", self.host)
+	_, err = cli.Put(context.TODO(), key, self.host, clientv3.WithLease(resp.ID))
 	if err != nil {
 		plog.Error(fmt.Sprintf("Could not update host on etcd, error: %s", err))
 		return err
@@ -73,7 +73,7 @@ func (s *EtcdStorage) register() error {
 		if t <= 0 {
 			t = 1
 		}
-		cli, err := s.getClient()
+		cli, err := self.getClient()
 		if err != nil {
 			plog.Error(err)
 		}
@@ -89,7 +89,7 @@ func (s *EtcdStorage) register() error {
 	return nil
 }
 
-func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
+func (self *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 	var err error
 	if cli == nil {
 		return nil, common.ErrETCDNotInit
@@ -105,10 +105,10 @@ func (s *EtcdStorage) getHosts(cli *clientv3.Client) ([]string, error) {
 	return hosts, nil
 }
 
-func (s *EtcdStorage) getClient() (*clientv3.Client, error) {
+func (self *EtcdStorage) getClient() (*clientv3.Client, error) {
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.endpoints,
-		DialTimeout: s.dialTimeout,
+		Endpoints:   self.endpoints,
+		DialTimeout: self.dialTimeout,
 	})
 	if err != nil {
 		return nil, err
@@ -116,9 +116,9 @@ func (s *EtcdStorage) getClient() (*clientv3.Client, error) {
 	return cli, nil
 }
 
-func (s *EtcdStorage) ImportNodes() {
-	dirKey := fmt.Sprintf("/goconserver/%s/nodes", s.host)
-	cli, err := s.getClient()
+func (self *EtcdStorage) ImportNodes() {
+	dirKey := fmt.Sprintf("/goconserver/%s/nodes", self.host)
+	cli, err := self.getClient()
 	if err != nil {
 		plog.Error(err)
 		return
@@ -144,16 +144,16 @@ func (s *EtcdStorage) ImportNodes() {
 			plog.ErrorNode(node.Name, "Driver is not defined")
 			continue
 		}
-		s.Storage.Nodes[node.Name] = node
+		self.Storage.Nodes[node.Name] = node
 	}
 }
 
-func (s *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error) {
+func (self *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error) {
 	var err error
 	if cli == nil {
 		return nil, common.ErrETCDNotInit
 	}
-	hosts, err := s.getHosts(cli)
+	hosts, err := self.getHosts(cli)
 	if err != nil {
 		plog.Error(err)
 		return nil, err
@@ -172,7 +172,7 @@ func (s *EtcdStorage) getHostCount(cli *clientv3.Client) (map[string]int, error)
 	return hostsCount, nil
 }
 
-func (s *EtcdStorage) getMinHost(hostsCount map[string]int) string {
+func (self *EtcdStorage) getMinHost(hostsCount map[string]int) string {
 	minHost := ""
 	minCount := common.Maxint32
 	for k, v := range hostsCount {
@@ -187,14 +187,29 @@ func (s *EtcdStorage) getMinHost(hostsCount map[string]int) string {
 	return minHost
 }
 
-func (s *EtcdStorage) ListNodeWithHost() map[string]string {
-	cli, err := s.getClient()
+func (self *EtcdStorage) GetHosts() []string {
+	cli, err := self.getClient()
 	if err != nil {
 		plog.Error(err)
 		return nil
 	}
 	defer cli.Close()
-	hosts, err := s.getHosts(cli)
+	hosts, err := self.getHosts(cli)
+	if err != nil {
+		plog.Error(err)
+		return nil
+	}
+	return hosts
+}
+
+func (self *EtcdStorage) ListNodeWithHost() map[string]string {
+	cli, err := self.getClient()
+	if err != nil {
+		plog.Error(err)
+		return nil
+	}
+	defer cli.Close()
+	hosts, err := self.getHosts(cli)
 	if err != nil {
 		plog.Error(err)
 		return nil
@@ -218,24 +233,24 @@ func (s *EtcdStorage) ListNodeWithHost() map[string]string {
 	return hostNodes
 }
 
-func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
+func (self *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 	if action == common.ACTION_PUT {
 		if reflect.TypeOf(nodes).Kind() != reflect.Map {
 			plog.Error("The persistance format is not Map, ignore.")
 		}
-		cli, err := s.getClient()
+		cli, err := self.getClient()
 		if err != nil {
 			plog.Error(err)
 			return
 		}
 		defer cli.Close()
-		hostsCount, err := s.getHostCount(cli)
+		hostsCount, err := self.getHostCount(cli)
 		if err != nil {
 			plog.Error(err)
 			return
 		}
 		for _, v := range nodes.(map[string][]Node)["nodes"] {
-			host := s.getMinHost(hostsCount)
+			host := self.getMinHost(hostsCount)
 			if host == "" {
 				plog.Error("Could not find proper host")
 				return
@@ -257,14 +272,14 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 		if reflect.TypeOf(nodes).Kind() != reflect.Slice {
 			plog.Error("The persistance format is not Slice, ignore.")
 		}
-		cli, err := s.getClient()
+		cli, err := self.getClient()
 		if err != nil {
 			plog.Error(err)
 			return
 		}
 		defer cli.Close()
 		for _, v := range nodes.([]string) {
-			key := fmt.Sprintf("/goconserver/%s/nodes/%s", s.host, v)
+			key := fmt.Sprintf("/goconserver/%s/nodes/%s", self.host, v)
 			_, err = cli.Delete(context.TODO(), key)
 			if err != nil {
 				plog.ErrorNode(v, err)
@@ -276,14 +291,14 @@ func (s *EtcdStorage) NotifyPersist(nodes interface{}, action int) {
 	}
 }
 
-func (s *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
-	cli, err := s.getClient()
+func (self *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
+	cli, err := self.getClient()
 	if err != nil {
 		plog.Error(err)
 		return
 	}
 	defer cli.Close()
-	key := fmt.Sprintf("/goconserver/%s/nodes/", s.host)
+	key := fmt.Sprintf("/goconserver/%s/nodes/", self.host)
 	changes := cli.Watch(context.Background(), key, clientv3.WithPrefix())
 	for resp := range changes {
 		for _, ev := range resp.Events {
@@ -302,6 +317,6 @@ func (s *EtcdStorage) PersistWatcher(eventChan chan map[int][]byte) {
 	}
 }
 
-func (s *EtcdStorage) SupportWatcher() bool {
+func (self *EtcdStorage) SupportWatcher() bool {
 	return true
 }

@@ -34,6 +34,7 @@ func (s *Storage) GetNodes() map[string]*Node {
 type StorInterface interface {
 	ImportNodes()
 	PersistWatcher(eventChan chan map[int][]byte)
+	GetHosts() []string
 	GetNodes() map[string]*Node
 	NotifyPersist(interface{}, int)
 	SupportWatcher() bool

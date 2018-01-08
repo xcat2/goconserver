@@ -57,8 +57,9 @@ func KeyValueToMap(value string, sep string) (map[string]interface{}, error) {
 }
 
 type nodeHost struct {
-	name string
-	host string
+	name  string
+	host  string
+	state string
 }
 type nodeHostSlice []nodeHost
 
@@ -128,11 +129,11 @@ func (c *CongoCli) list(cmd *cobra.Command, args []string) {
 	for _, v := range nodes {
 		node := v.(map[string]interface{})
 		tempNodes = append(tempNodes, nodeHost{name: node["name"].(string),
-			host: node["host"].(string)})
+			host: node["host"].(string), state: node["state"].(string)})
 	}
 	sort.Sort(nodeHostSlice(tempNodes))
 	for _, v := range tempNodes {
-		fmt.Printf("%s (host: %s)\n", v.name, v.host)
+		fmt.Printf("%s (host: %s, state: %s)\n", v.name, v.host, v.state)
 	}
 }
 

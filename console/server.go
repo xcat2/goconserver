@@ -570,15 +570,37 @@ func (m *NodeManager) ListNode() map[string][]map[string]string {
 			nodeMap := make(map[string]string)
 			nodeMap["name"] = node.StorageNode.Name
 			nodeMap["host"] = m.hostname
+			nodeMap["state"] = STATUS_MAP[node.GetStatus()]
 			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
 		m.RWlock.RUnlock()
 	} else {
+		var host string
+		var node string
 		nodeWithHost := m.stor.ListNodeWithHost()
-		for node, host := range nodeWithHost {
+		hosts := m.stor.GetHosts()
+		if hosts == nil {
+			return nodes
+		}
+		statusMap := make(map[string]int)
+		for _, host = range hosts {
+			rpcClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
+			rpcResult, err := rpcClient.ListNodesStatus()
+			if err != nil {
+				plog.Error(fmt.Sprintf("Could not get rpc result from host %s, Error: %s", host, err.Error()))
+				continue
+			}
+			for k, v := range rpcResult {
+				statusMap[k] = v
+			}
+		}
+		for node, host = range nodeWithHost {
 			nodeMap := make(map[string]string)
 			nodeMap["name"] = node
 			nodeMap["host"] = host
+			if status, ok := statusMap[node]; ok {
+				nodeMap["state"] = STATUS_MAP[status]
+			}
 			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
 	}
@@ -666,8 +688,8 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 	}
 	result := make(map[string]string)
 	for host, nodeList = range hostNodes {
-		cRPCClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
-		hostResult, err := cRPCClient.SetConsoleState(nodeList, state)
+		rpcClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
+		hostResult, err := rpcClient.SetConsoleState(nodeList, state)
 		if err != nil {
 			continue
 		}
@@ -866,8 +888,8 @@ func (m *NodeManager) Replay(name string) (string, int, string) {
 		if _, ok := nodeWithHost[name]; !ok {
 			return "", http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
-		content, err = cRPCClient.GetReplayContent(name)
+		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		content, err = rpcClient.GetReplayContent(name)
 		if err != nil {
 			return "", http.StatusInternalServerError, err.Error()
 		}
@@ -897,8 +919,8 @@ func (m *NodeManager) ListUser(name string) (map[string][]string, int, string) {
 		if _, ok := nodeWithHost[name]; !ok {
 			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
-		users, err = cRPCClient.ListSessionUser(name)
+		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		users, err = rpcClient.ListSessionUser(name)
 		if err != nil {
 			return nil, http.StatusInternalServerError, err.Error()
 		}
