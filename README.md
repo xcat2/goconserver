@@ -56,6 +56,7 @@ Please setup golang SDK, GOPATH environment variable and glide tool at first.
 ```
 git clone https://github.com/chenglch/goconserver.git
 cd goconserver
+make deps
 make install
 ```
 

@@ -7,7 +7,16 @@ CLIENT_CONF_FILE=~/congo.sh
 SERVER_BINARY=goconserver
 CLIENT_BINARY=congo
 COMMIT=$(shell git rev-parse HEAD)
-VERSION=0.1
+ARCH=$(shell uname -m)
+PLATFORM=$(shell uname)
+ifeq ($(ARCH), x86_64)
+	ARCH=amd64
+endif
+
+ifeq ($(PLATFORM), Linux)
+	PLATFORM=linux
+endif
+VERSION=0.2
 BUILD_TIME=`date +%FT%T%z`
 LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.Commit=${COMMIT}"
 
@@ -16,7 +25,7 @@ deps:
 	go get github.com/Masterminds/glide
 	glide install
 
-link: deps
+link:
 	REPO_DIR=${REPO_DIR}; \
 	REPO_DIR_LINK=${REPO_DIR_LINK}; \
 	CURRENT_DIR=${CURRENT_DIR}; \
@@ -50,8 +59,20 @@ install: build
 		cp etc/goconserver/client.sh /etc/profile.d/congo.sh; \
 	fi
 
+tar: build
+	mkdir -p build/goconserver_${PLATFORM}_${ARCH}; \
+	cp -r etc build/goconserver_${PLATFORM}_${ARCH}; \
+	cp -r scripts build/goconserver_${PLATFORM}_${ARCH}; \
+	cp ${SERVER_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
+	cp ${CLIENT_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
+	cd build/goconserver_${PLATFORM}_${ARCH}; \
+	ln -s scripts/setup.sh setup.sh; \
+	cd - ;\
+	tar cvfz build/goconserver_${PLATFORM}_${ARCH}.tar.gz -C build goconserver_${PLATFORM}_${ARCH}
+
 clean:
 	rm -f ${SERVER_BINARY}
 	rm -f ${CLIENT_BINARY}
+	rm -rf build
 
-.PHONY: binary deps fmt build clean link
+.PHONY: binary deps fmt build clean link tar
