@@ -3,11 +3,10 @@ package console
 import (
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pb "github.com/chenglch/goconserver/console/consolepb"
-	"github.com/chenglch/goconserver/console/logger"
+	pl "github.com/chenglch/goconserver/console/pipeline"
 	"github.com/chenglch/goconserver/plugins"
 	"github.com/chenglch/goconserver/storage"
 	"net"
@@ -33,11 +32,10 @@ const (
 )
 
 var (
-	plog          = common.GetLogger("github.com/chenglch/goconserver/service")
-	nodeManager   *NodeManager
-	serverConfig  = common.GetServerConfig()
-	consoleLogger logger.Logger
-	STATUS_MAP    = map[int]string{
+	plog         = common.GetLogger("github.com/chenglch/goconserver/service")
+	nodeManager  *NodeManager
+	serverConfig = common.GetServerConfig()
+	STATUS_MAP   = map[int]string{
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
 		STATUS_CONNECTED: "connected",
@@ -463,6 +461,7 @@ type NodeManager struct {
 	RWlock    *sync.RWMutex
 	stor      storage.StorInterface
 	rpcServer *ConsoleRPCServer
+	pipeline  *pl.Pipeline
 	hostname  string
 }
 
@@ -484,10 +483,8 @@ func GetNodeManager() *NodeManager {
 		nodeManager.stor = stor
 		nodeManager.stor.ImportNodes()
 		nodeManager.fromStorNodes()
-		if _, ok := logger.LOGGER_INIT_MAP[serverConfig.Console.LoggerType]; !ok {
-			panic(errors.New(fmt.Sprintf("The logger type %s is not supported", serverConfig.Console.LoggerType)))
-		}
-		consoleLogger, err = logger.LOGGER_INIT_MAP[serverConfig.Console.LoggerType]()
+		// start loggers
+		nodeManager.pipeline, err = pl.NewPipeline(&serverConfig.Console.Loggers)
 		if err != nil {
 			panic(err)
 		}
@@ -876,7 +873,7 @@ func (m *NodeManager) Replay(name string) (string, int, string) {
 			return "", http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
 		// TODO: make replaylines more flexible
-		content, err = consoleLogger.Fetch(name, serverConfig.Console.ReplayLines)
+		content, err = nodeManager.pipeline.Fetch(name, serverConfig.Console.ReplayLines)
 		if err != nil {
 			return "", http.StatusInternalServerError, err.Error()
 		}

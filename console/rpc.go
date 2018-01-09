@@ -63,7 +63,7 @@ func (self *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode 
 		return nil, common.ErrNodeNotExist
 	}
 	// TODO: make ReplayLines more flexible
-	content, err := consoleLogger.Fetch(rpcNode.Name, serverConfig.Console.ReplayLines)
+	content, err := nodeManager.pipeline.Fetch(rpcNode.Name, serverConfig.Console.ReplayLines)
 	if err != nil {
 		return nil, err
 	}

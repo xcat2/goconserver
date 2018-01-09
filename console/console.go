@@ -129,7 +129,7 @@ func (c *Console) writeClient(conn net.Conn) {
 		plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 		return
 	}
-	err = consoleLogger.Prompt(c.node.StorageNode.Name, welcome)
+	err = nodeManager.pipeline.Prompt(c.node.StorageNode.Name, welcome)
 	if err != nil {
 		plog.DebugNode(c.node.StorageNode.Name, err.Error())
 	}
@@ -154,7 +154,7 @@ func (c *Console) readTarget() {
 	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
 		plog.DebugNode(c.node.StorageNode.Name, "readTarget goroutine quit")
-		err := consoleLogger.Prompt(c.node.StorageNode.Name, "[goconserver disconnected]")
+		err := nodeManager.pipeline.Prompt(c.node.StorageNode.Name, "[goconserver disconnected]")
 		if err != nil {
 			plog.DebugNode(c.node.StorageNode.Name, err.Error())
 		}
@@ -163,7 +163,7 @@ func (c *Console) readTarget() {
 	var err error
 	var n int
 	b := make([]byte, common.BUF_SIZE)
-	err = consoleLogger.Prompt(c.node.StorageNode.Name, "[goconserver connected]")
+	err = nodeManager.pipeline.Prompt(c.node.StorageNode.Name, "[goconserver connected]")
 	if err != nil {
 		plog.WarningNode(c.node.StorageNode.Name, err.Error())
 	}
@@ -184,7 +184,7 @@ func (c *Console) readTarget() {
 		}
 		if n > 0 {
 			c.writeClientChan(b[:n])
-			consoleLogger.Emit(c.node.StorageNode.Name, b[:n], c.last)
+			nodeManager.pipeline.MakeRecord(c.node.StorageNode.Name, b[:n], c.last)
 			if err != nil {
 				plog.DebugNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message. Error:%s", err.Error()))
 			}
