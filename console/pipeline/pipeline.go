@@ -44,15 +44,19 @@ func NewPipeline(loggerCfg *common.LoggerCfg) (*Pipeline, error) {
 }
 
 type Pipeline struct {
-	rwLock  *sync.RWMutex
-	mapping map[string]Logger
-	loggers []Logger
+	rwLock   *sync.RWMutex
+	mapping  map[string]Logger
+	loggers  []Logger
+	Periodic bool
 }
 
 func (self *Pipeline) register(publisher Publisher) {
 	var logger Logger
 	var ok bool
 	if logger, ok = self.mapping[publisher.GetLoggerType()]; !ok {
+		if publisher.GetLoggerType() == LINE_LOGGER {
+			self.Periodic = true
+		}
 		logger = LOGGER_INIT_MAP[publisher.GetLoggerType()]()
 		self.loggers = append(self.loggers, logger)
 		self.mapping[publisher.GetLoggerType()] = logger
@@ -61,10 +65,21 @@ func (self *Pipeline) register(publisher Publisher) {
 }
 
 // only LineLogger may affect the last pointer
-func (self *Pipeline) MakeRecord(node string, b []byte, last *[]byte) error {
+func (self *Pipeline) MakeRecord(node string, b []byte, last *RemainBuffer) error {
 	var err error
 	for _, logger := range self.loggers {
 		err = logger.MakeRecord(node, b, last)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (self *Pipeline) PromptLast(node string, last *RemainBuffer) error {
+	var err error
+	for _, logger := range self.loggers {
+		err = logger.PromptLast(node, last)
 		if err != nil {
 			return err
 		}

@@ -44,6 +44,11 @@ var (
 	}
 )
 
+type ReadyBuffer struct {
+	node string
+	last *pl.RemainBuffer
+}
+
 type Node struct {
 	StorageNode *storage.Node
 	State       string // string value of status
@@ -488,6 +493,8 @@ func GetNodeManager() *NodeManager {
 		if err != nil {
 			panic(err)
 		}
+		// for linelogger to send the last buffer
+		go nodeManager.PeriodicTask()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
 		nodeManager.initNodes()
 		go nodeManager.PersistWatcher()
@@ -969,6 +976,36 @@ func (m *NodeManager) PersistWatcher() {
 			} else {
 				plog.Error("Internal error")
 			}
+		}
+	}
+}
+
+// for linelogger to send the last buffer
+func (m *NodeManager) PeriodicTask() {
+	if m.pipeline.Periodic == false {
+		return
+	}
+	plog.Info("Starting peridic task")
+	tick := time.Tick(common.PERIODIC_INTERVAL)
+	for {
+		<-tick
+		current := time.Now()
+		plog.Debug("Periodic task is running")
+		readyList := make([]*ReadyBuffer, 0)
+		m.RWlock.RLock()
+		for k, v := range m.Nodes {
+			console := v.console
+			if console == nil {
+				continue
+			}
+			if console.last.Buf != nil && console.last.Deadline.After(current) {
+				readyBuf := &ReadyBuffer{node: k, last: console.last}
+				readyList = append(readyList, readyBuf)
+			}
+		}
+		m.RWlock.RUnlock()
+		for _, readyBuf := range readyList {
+			m.pipeline.PromptLast(readyBuf.node, readyBuf.last)
 		}
 	}
 }

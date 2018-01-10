@@ -3,6 +3,7 @@ package console
 import (
 	"fmt"
 	"github.com/chenglch/goconserver/common"
+	pl "github.com/chenglch/goconserver/console/pipeline"
 	"github.com/chenglch/goconserver/plugins"
 	"io"
 	"net"
@@ -30,7 +31,7 @@ type Console struct {
 	running   chan bool
 	node      *Node
 	mutex     *sync.RWMutex
-	last      *[]byte // the rest of the buffer that has not been emitted
+	last      *pl.RemainBuffer // the rest of the buffer that has not been emitted
 }
 
 func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
@@ -41,7 +42,7 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 		bufConn:   make(map[net.Conn]chan []byte),
 		running:   make(chan bool, 0),
 		mutex:     new(sync.RWMutex),
-		last:      new([]byte),
+		last:      new(pl.RemainBuffer),
 	}
 }
 

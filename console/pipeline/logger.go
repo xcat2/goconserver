@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+const (
+	EVENT_TYPE   = "event"   // some event like connected or disconnected
+	CONSOLE_TYPE = "console" // console message
+	REMAIN_TYPE  = "remain"  // last incomplete record
+)
+
 func init() {
 	LOGGER_INIT_MAP[LINE_LOGGER] = NewLineLogger
 	LOGGER_INIT_MAP[BYTE_LOGGER] = NewByteLogger
@@ -32,19 +38,19 @@ func (self *LineLogger) Register(publisher Publisher) {
 	self.publishers = append(self.publishers, publisher)
 }
 
-func (self *LineLogger) MakeRecord(node string, b []byte, last *[]byte) error {
+func (self *LineLogger) MakeRecord(node string, b []byte, last *RemainBuffer) error {
 	var err error
 	var buf []byte
 	p := 0
-	if *last != nil {
-		b = append(*last, b...)
+	if last.Buf != nil {
+		b = append(last.Buf, b...)
 	}
 	for i := 0; i < len(b); i++ {
 		if b[i] == '\n' {
 			var line bytes.Buffer
 			line.Write(b[p:i])
 			bufMap := make(map[string]string)
-			bufMap["type"] = "console"
+			bufMap["type"] = CONSOLE_TYPE
 			bufMap["message"] = line.String()
 			bufMap["node"] = node
 
@@ -65,6 +71,28 @@ func (self *LineLogger) MakeRecord(node string, b []byte, last *[]byte) error {
 	return nil
 }
 
+func (self *LineLogger) PromptLast(node string, last *RemainBuffer) error {
+	var err error
+	var buf []byte
+	if last.Buf != nil {
+		bufMap := make(map[string]string)
+		bufMap["message"] = string(last.Buf)
+		// check again after copy
+		if bufMap["message"] == "" {
+			return nil
+		}
+		bufMap["type"] = REMAIN_TYPE
+		bufMap["node"] = node
+		buf, err = json.Marshal(bufMap)
+		if err != nil {
+			plog.ErrorNode(node, err)
+			return err
+		}
+		self.bufChan <- append(buf, []byte{'\n'}...)
+	}
+	return nil
+}
+
 func (self *LineLogger) emit(buf []byte) {
 	for _, publisher := range self.publishers {
 		publishChan, err := publisher.GetPublishChan()
@@ -77,7 +105,7 @@ func (self *LineLogger) emit(buf []byte) {
 		}
 		select {
 		case publishChan <- buf:
-		case <-time.After(sendInterval * 2):
+		case <-time.After(common.PIPELINE_SEND_INTERVAL * 2):
 			plog.Warn(fmt.Sprintf("Timeout for waiting publisher %s", publisher.GetName()))
 		}
 	}
@@ -91,7 +119,7 @@ func (self *LineLogger) Prompt(node string, message string) error {
 	var err error
 	var buf []byte
 	bufMap := make(map[string]string)
-	bufMap["type"] = "event"
+	bufMap["type"] = EVENT_TYPE
 	bufMap["message"] = message
 	bufMap["node"] = node
 	if serverConfig.Console.LogTimestamp {
@@ -109,7 +137,7 @@ func (self *LineLogger) Prompt(node string, message string) error {
 func (self *LineLogger) run() {
 	var buf bytes.Buffer
 	plog.Debug("Starting line logger")
-	ticker := time.NewTicker(sendInterval)
+	ticker := time.NewTicker(common.PIPELINE_SEND_INTERVAL)
 	// timeout may block data
 	for {
 		select {
@@ -159,7 +187,7 @@ func (self *ByteLogger) insertStamp(b []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (self *ByteLogger) MakeRecord(node string, b []byte, last *[]byte) error {
+func (self *ByteLogger) MakeRecord(node string, b []byte, last *RemainBuffer) error {
 	// FileLogger do not left the buffer that has not been emited
 	var err error
 	if serverConfig.Console.LogTimestamp {
@@ -212,5 +240,9 @@ func (self *ByteLogger) Prompt(node string, message string) error {
 			continue
 		}
 	}
+	return nil
+}
+
+func (self *ByteLogger) PromptLast(node string, last *RemainBuffer) error {
 	return nil
 }

@@ -5,10 +5,13 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"time"
 )
 
 const (
-	CLIENT_CONGO_TYPE = iota
+	PERIODIC_INTERVAL      = time.Minute
+	PIPELINE_SEND_INTERVAL = 300 * time.Millisecond
+	CLIENT_CONGO_TYPE      = iota
 	CLIENT_XCAT_TYPE
 )
 

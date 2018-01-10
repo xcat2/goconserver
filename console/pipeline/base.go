@@ -6,10 +6,9 @@ import (
 )
 
 const (
-	sendInterval = 300 * time.Millisecond
-	LINE_LOGGER  = "line"
-	BYTE_LOGGER  = "byte"
-	UNKNOWN      = "unknown"
+	LINE_LOGGER = "line"
+	BYTE_LOGGER = "byte"
+	UNKNOWN     = "unknown"
 )
 
 var (
@@ -20,10 +19,11 @@ var (
 )
 
 type Logger interface {
-	MakeRecord(node string, b []byte, last *[]byte) error // create log message
-	Prompt(node string, message string) error             // prompt message about console event
-	Fetch(node string, count int) (string, error)         // to support console replay
+	MakeRecord(node string, b []byte, last *RemainBuffer) error // create log message
+	Prompt(node string, message string) error                   // prompt message about console event
+	Fetch(node string, count int) (string, error)               // to support console replay
 	Register(publisher Publisher)
+	PromptLast(node string, last *RemainBuffer) error // prompt the last buffer if have
 }
 
 type Publisher interface {
@@ -32,6 +32,11 @@ type Publisher interface {
 	GetPublishChan() (chan []byte, error)        // for async publisher
 	GetLoggerType() string                       // LineLogger or ByteLogger
 	GetName() string                             // Identity of the publisher
+}
+
+type RemainBuffer struct {
+	Buf      []byte
+	Deadline time.Time
 }
 
 type BasePublisher struct {
@@ -63,11 +68,13 @@ func (self *NetworkPublisher) GetPublishChan() (chan []byte, error) {
 	return self.publisherChan, nil
 }
 
-func copyLast(last *[]byte, b []byte) {
+func copyLast(last *RemainBuffer, b []byte) {
 	if len(b) == 0 {
-		*last = nil
+		last.Buf = nil
 		return
 	}
-	*last = make([]byte, len(b))
-	copy(*last, b)
+	last.Buf = make([]byte, len(b))
+	copy(last.Buf, b)
+	// add 15 second
+	last.Deadline = time.Now().Add(common.PERIODIC_INTERVAL).Add(15 * time.Second)
 }
