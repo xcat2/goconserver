@@ -138,6 +138,17 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	if err != nil {
 		return serverConfig, err
 	}
+	i := 0
+	for i = 0; i < len(serverConfig.Console.Loggers.TCP); i++ {
+		if serverConfig.Console.Loggers.TCP[i].Timeout == 0 {
+			serverConfig.Console.Loggers.TCP[i].Timeout = 3
+		}
+	}
+	for i = 0; i < len(serverConfig.Console.Loggers.UDP); i++ {
+		if serverConfig.Console.Loggers.UDP[i].Timeout == 0 {
+			serverConfig.Console.Loggers.UDP[i].Timeout = 3
+		}
+	}
 	CONF_FILE = confFile
 	return serverConfig, nil
 }
