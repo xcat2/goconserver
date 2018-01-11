@@ -32,7 +32,7 @@ func (s *Storage) GetNodes() map[string]*Node {
 }
 
 type StorInterface interface {
-	ImportNodes()
+	ImportNodes() // import nodes to Storage.Nodes
 	PersistWatcher(eventChan chan map[int][]byte)
 	GetHosts() []string
 	GetNodes() map[string]*Node

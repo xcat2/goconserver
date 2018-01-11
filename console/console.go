@@ -47,65 +47,65 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 }
 
 // Accept connection from client
-func (c *Console) Accept(conn net.Conn) {
-	plog.DebugNode(c.node.StorageNode.Name, "Accept connection from client")
-	c.mutex.Lock()
-	c.bufConn[conn] = make(chan []byte)
-	c.mutex.Unlock()
-	go c.writeTarget(conn)
-	go c.writeClient(conn)
+func (self *Console) Accept(conn net.Conn) {
+	plog.DebugNode(self.node.StorageNode.Name, "Accept connection from client")
+	self.mutex.Lock()
+	self.bufConn[conn] = make(chan []byte)
+	self.mutex.Unlock()
+	go self.writeTarget(conn)
+	go self.writeClient(conn)
 }
 
 // Disconnect from client
-func (c *Console) Disconnect(conn net.Conn) {
+func (self *Console) Disconnect(conn net.Conn) {
 	var bufChan chan []byte
 	var ok bool
 	conn.Close()
-	c.mutex.Lock()
-	if bufChan, ok = c.bufConn[conn]; ok {
+	self.mutex.Lock()
+	if bufChan, ok = self.bufConn[conn]; ok {
 		close(bufChan)
-		delete(c.bufConn, conn)
+		delete(self.bufConn, conn)
 	}
-	c.mutex.Unlock()
+	self.mutex.Unlock()
 	// all of the client has been disconnected
-	if len(c.bufConn) == 0 && c.node.logging == false {
-		c.Close()
+	if len(self.bufConn) == 0 && self.node.logging == false {
+		self.Close()
 	}
 }
 
-func (c *Console) writeTarget(conn net.Conn) {
-	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to read message from client.")
+func (self *Console) writeTarget(conn net.Conn) {
+	plog.DebugNode(self.node.StorageNode.Name, "Create new connection to read message from client.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "writeTarget goroutine quit")
-		c.Disconnect(conn)
+		plog.DebugNode(self.node.StorageNode.Name, "writeTarget goroutine quit")
+		self.Disconnect(conn)
 	}()
 	for {
-		c.mutex.RLock()
-		if _, ok := c.bufConn[conn]; !ok {
-			c.mutex.RUnlock()
-			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
+		self.mutex.RLock()
+		if _, ok := self.bufConn[conn]; !ok {
+			self.mutex.RUnlock()
+			plog.ErrorNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
-		c.mutex.RUnlock()
+		self.mutex.RUnlock()
 		n, err := common.Network.ReceiveInt(conn)
 		if err != nil {
-			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message head from client. Error:%s.", err.Error()))
+			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to receive message head from client. Error:%s.", err.Error()))
 			return
 		}
 		b, err := common.Network.ReceiveBytes(conn, n)
 		if err != nil {
-			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
+			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
 			return
 		}
 		if string(b) == ExitSequence {
-			plog.InfoNode(c.node.StorageNode.Name, "Received exit signal from client")
+			plog.InfoNode(self.node.StorageNode.Name, "Received exit signal from client")
 			return
 		}
 		tmp := 0
 		for n > 0 {
-			count, err := c.remoteIn.Write(b[tmp:])
+			count, err := self.remoteIn.Write(b[tmp:])
 			if err != nil {
-				plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
+				plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
 				return
 			}
 			tmp += count
@@ -114,155 +114,155 @@ func (c *Console) writeTarget(conn net.Conn) {
 	}
 }
 
-func (c *Console) writeClient(conn net.Conn) {
-	plog.DebugNode(c.node.StorageNode.Name, "Create new connection to write message to client.")
+func (self *Console) writeClient(conn net.Conn) {
+	plog.DebugNode(self.node.StorageNode.Name, "Create new connection to write message to client.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "writeClient goroutine quit")
-		c.Disconnect(conn)
+		plog.DebugNode(self.node.StorageNode.Name, "writeClient goroutine quit")
+		self.Disconnect(conn)
 	}()
 	var bufChan chan []byte
 	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s\r\n",
-		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), c.node.StorageNode.Name)
+		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), self.node.StorageNode.Name)
 	err := common.Network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
 	if err != nil {
-		plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+		plog.InfoNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 		return
 	}
-	err = nodeManager.pipeline.Prompt(c.node.StorageNode.Name, welcome)
+	err = nodeManager.pipeline.Prompt(self.node.StorageNode.Name, welcome)
 	if err != nil {
-		plog.DebugNode(c.node.StorageNode.Name, err.Error())
+		plog.DebugNode(self.node.StorageNode.Name, err.Error())
 	}
 	for {
-		c.mutex.RLock()
-		if bufChan, ok = c.bufConn[conn]; !ok {
-			c.mutex.RUnlock()
-			plog.ErrorNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
+		self.mutex.RLock()
+		if bufChan, ok = self.bufConn[conn]; !ok {
+			self.mutex.RUnlock()
+			plog.ErrorNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to find the connection from bufConn, the connection may be closed."))
 			return
 		}
-		c.mutex.RUnlock()
+		self.mutex.RUnlock()
 		b := <-bufChan
 		err = common.Network.SendByteWithLengthTimeout(conn, b, clientTimeout)
 		if err != nil {
-			plog.InfoNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
+			plog.InfoNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 			return
 		}
 	}
 }
 
-func (c *Console) readTarget() {
-	plog.DebugNode(c.node.StorageNode.Name, "Read target session has been initialized.")
+func (self *Console) readTarget() {
+	plog.DebugNode(self.node.StorageNode.Name, "Read target session has been initialized.")
 	defer func() {
-		plog.DebugNode(c.node.StorageNode.Name, "readTarget goroutine quit")
-		err := nodeManager.pipeline.Prompt(c.node.StorageNode.Name, "[goconserver disconnected]")
+		plog.DebugNode(self.node.StorageNode.Name, "readTarget goroutine quit")
+		err := nodeManager.pipeline.Prompt(self.node.StorageNode.Name, "[goconserver disconnected]")
 		if err != nil {
-			plog.DebugNode(c.node.StorageNode.Name, err.Error())
+			plog.DebugNode(self.node.StorageNode.Name, err.Error())
 		}
-		c.Stop()
+		self.Stop()
 	}()
 	var err error
 	var n int
 	b := make([]byte, common.BUF_SIZE)
-	err = nodeManager.pipeline.Prompt(c.node.StorageNode.Name, "[goconserver connected]")
+	err = nodeManager.pipeline.Prompt(self.node.StorageNode.Name, "[goconserver connected]")
 	if err != nil {
-		plog.WarningNode(c.node.StorageNode.Name, err.Error())
+		plog.WarningNode(self.node.StorageNode.Name, err.Error())
 	}
 	for {
 		select {
-		case running := <-c.running:
+		case running := <-self.running:
 			switch running {
 			case false:
-				plog.InfoNode(c.node.StorageNode.Name, "Stop readTarget session.")
+				plog.InfoNode(self.node.StorageNode.Name, "Stop readTarget session.")
 				return
 			}
 		default:
 		}
-		n, err = c.remoteOut.Read(b)
+		n, err = self.remoteOut.Read(b)
 		if err != nil {
-			plog.WarningNode(c.node.StorageNode.Name, fmt.Sprintf("Could not receive message from remote. Error:", err.Error()))
+			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Could not receive message from remote. Error:", err.Error()))
 			return
 		}
 		if n > 0 {
-			c.writeClientChan(b[:n])
-			nodeManager.pipeline.MakeRecord(c.node.StorageNode.Name, b[:n], c.last)
+			self.writeClientChan(b[:n])
+			nodeManager.pipeline.MakeRecord(self.node.StorageNode.Name, b[:n], self.last)
 			if err != nil {
-				plog.DebugNode(c.node.StorageNode.Name, fmt.Sprintf("Failed to log message. Error:%s", err.Error()))
+				plog.DebugNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to log message. Error:%s", err.Error()))
 			}
 		}
 	}
 }
 
-func (c *Console) writeClientChan(buf []byte) {
+func (self *Console) writeClientChan(buf []byte) {
 	b := make([]byte, len(buf))
 	copy(b, buf)
-	c.mutex.RLock()
-	for _, v := range c.bufConn {
+	self.mutex.RLock()
+	for _, v := range self.bufConn {
 		v <- b
 	}
-	c.mutex.RUnlock()
+	self.mutex.RUnlock()
 }
 
-func (c *Console) Start() {
+func (self *Console) Start() {
 	defer func() {
-		c.node.status = STATUS_AVAIABLE
+		self.node.status = STATUS_AVAIABLE
 	}()
-	plog.DebugNode(c.node.StorageNode.Name, "Start console session.")
-	c.running = make(chan bool, 0)
-	go c.readTarget()
-	c.node.ready <- true
-	c.node.status = STATUS_CONNECTED
+	plog.DebugNode(self.node.StorageNode.Name, "Start console session.")
+	self.running = make(chan bool, 0)
+	go self.readTarget()
+	self.node.ready <- true
+	self.node.status = STATUS_CONNECTED
 	defer func() {
-		// catch c.session nil pointer
+		// catch self.session nil pointer
 		if r := recover(); r != nil {
-			plog.WarningNode(c.node.StorageNode.Name, r)
+			plog.WarningNode(self.node.StorageNode.Name, r)
 		}
 	}()
-	c.session.Wait()
-	c.session.Close()
+	self.session.Wait()
+	self.session.Close()
 }
 
 // called from rest api to stop the console session
-func (c *Console) Stop() {
-	c.Close()
+func (self *Console) Stop() {
+	self.Close()
 }
 
-func (c *Console) ListSessionUser() []string {
-	ret := make([]string, len(c.bufConn))
+func (self *Console) ListSessionUser() []string {
+	ret := make([]string, len(self.bufConn))
 	i := 0
-	c.mutex.RLock()
-	for c, _ := range c.bufConn {
+	self.mutex.RLock()
+	for c, _ := range self.bufConn {
 		ret[i] = c.RemoteAddr().String()
 		i++
 	}
-	c.mutex.RUnlock()
+	self.mutex.RUnlock()
 	return ret
 }
 
-func (c *Console) Close() {
-	if c.session == nil {
+func (self *Console) Close() {
+	if self.session == nil {
 		// may be closed by the other thread
 		return
 	}
-	c.mutex.Lock()
+	self.mutex.Lock()
 	// with lock check again
-	if c.session == nil {
-		c.mutex.Unlock()
+	if self.session == nil {
+		self.mutex.Unlock()
 		return
 	}
-	plog.DebugNode(c.node.StorageNode.Name, "Close console session.")
-	for k, v := range c.bufConn {
+	plog.DebugNode(self.node.StorageNode.Name, "Close console session.")
+	for k, v := range self.bufConn {
 		close(v)
 		k.Close()
-		delete(c.bufConn, k)
+		delete(self.bufConn, k)
 	}
-	if c.running != nil {
-		close(c.running)
-		c.running = nil
+	if self.running != nil {
+		close(self.running)
+		self.running = nil
 	}
-	c.node.status = STATUS_AVAIABLE
-	c.node.console = nil
-	c.session.Close()
-	c.session = nil
-	c.mutex.Unlock()
+	self.node.status = STATUS_AVAIABLE
+	self.node.console = nil
+	self.session.Close()
+	self.session = nil
+	self.mutex.Unlock()
 }

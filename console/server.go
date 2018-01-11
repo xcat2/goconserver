@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	plog         = common.GetLogger("github.com/chenglch/goconserver/service")
+	plog         = common.GetLogger("github.com/chenglch/goconserver/console")
 	nodeManager  *NodeManager
 	serverConfig = common.GetServerConfig()
 	STATUS_MAP   = map[int]string{
@@ -61,7 +61,7 @@ type Node struct {
 	reserve     int
 }
 
-func NewNode(storNode *storage.Node) *Node {
+func NewNodeFromStor(storNode *storage.Node) *Node {
 	node := new(Node)
 	node.ready = make(chan bool, 0) // block client
 	node.reconnect = make(chan struct{}, 0)
@@ -77,7 +77,7 @@ func NewNode(storNode *storage.Node) *Node {
 	return node
 }
 
-func NewNodeFrom(pbNode *pb.Node) *Node {
+func NewNodeFromProto(pbNode *pb.Node) *Node {
 	node := new(Node)
 	node.StorageNode = new(storage.Node)
 	node.StorageNode.Name = pbNode.Name
@@ -93,174 +93,176 @@ func NewNodeFrom(pbNode *pb.Node) *Node {
 	return node
 }
 
-func (node *Node) Init() {
-	node.rwLock = new(sync.RWMutex)
-	node.reserve = common.TYPE_NO_LOCK
-	node.ready = make(chan bool, 0) // block client
-	node.reconnect = make(chan struct{}, 0)
-	node.status = STATUS_AVAIABLE
+// the storage information has been initialized, initialize the other fields in memory.
+func (self *Node) init() {
+	self.rwLock = new(sync.RWMutex)
+	self.reserve = common.TYPE_NO_LOCK
+	self.ready = make(chan bool, 0) // block client
+	self.reconnect = make(chan struct{}, 0)
+	self.status = STATUS_AVAIABLE
 }
 
-func (node *Node) Validate() error {
-	if _, ok := plugins.DRIVER_VALIDATE_MAP[node.StorageNode.Driver]; !ok {
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Coud not support driver %s", node.StorageNode.Driver))
+func (self *Node) Validate() error {
+	if _, ok := plugins.DRIVER_VALIDATE_MAP[self.StorageNode.Driver]; !ok {
+		plog.ErrorNode(self.StorageNode.Name, fmt.Sprintf("Coud not support driver %s", self.StorageNode.Driver))
 		return common.ErrDriverNotExist
 	}
-	if err := plugins.Validate(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params); err != nil {
+	if err := plugins.Validate(self.StorageNode.Driver, self.StorageNode.Name, self.StorageNode.Params); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (node *Node) restartConsole() {
+// if ondemand is false, start this goroutine to help restart the console
+func (self *Node) restartMonitor() {
 	var ok bool
 	var err error
 	for {
 		select {
-		case _, ok = <-node.reconnect:
+		case _, ok = <-self.reconnect:
 			if !ok {
-				plog.DebugNode(node.StorageNode.Name, "Exit reconnect goroutine")
+				plog.DebugNode(self.StorageNode.Name, "Exit reconnect goroutine")
 				return
 			}
-			if err = node.RequireLock(false); err != nil {
-				plog.ErrorNode(node.StorageNode.Name, err.Error())
+			if err = self.RequireLock(false); err != nil {
+				plog.ErrorNode(self.StorageNode.Name, err.Error())
 				break
 			}
 			// with lock then check
-			if node.GetStatus() == STATUS_CONNECTED {
-				node.Release(false)
+			if self.GetStatus() == STATUS_CONNECTED {
+				self.Release(false)
 				break
 			}
-			if node.logging == false {
-				node.Release(false)
+			if self.logging == false {
+				self.Release(false)
 				break
 			}
-			plog.DebugNode(node.StorageNode.Name, "Restart console session.")
-			go node.startConsole()
-			common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout)
-			node.Release(false)
+			plog.DebugNode(self.StorageNode.Name, "Restart console session.")
+			go self.startConsole()
+			common.TimeoutChan(self.ready, serverConfig.Console.TargetTimeout)
+			self.Release(false)
 		}
 	}
 }
 
 // A little different from StartConsole, this function do not handle the node lock, node ready
 // is used to wake up the waiting channel outside.
-func (node *Node) startConsole() {
+func (self *Node) startConsole() {
 	var consolePlugin plugins.ConsolePlugin
 	var err error
 	var baseSession *plugins.BaseSession
-	if node.console != nil {
-		plog.WarningNode(node.StorageNode.Name, "Console has already been started")
-		node.ready <- true
+	if self.console != nil {
+		plog.WarningNode(self.StorageNode.Name, "Console has already been started")
+		self.ready <- true
 		return
 	}
-	consolePlugin, err = plugins.StartConsole(node.StorageNode.Driver, node.StorageNode.Name, node.StorageNode.Params)
+	consolePlugin, err = plugins.StartConsole(self.StorageNode.Driver, self.StorageNode.Name, self.StorageNode.Params)
 	if err != nil {
-		node.status = STATUS_ERROR
-		node.ready <- false
-		if node.StorageNode.Ondemand == false {
+		self.status = STATUS_ERROR
+		self.ready <- false
+		if self.StorageNode.Ondemand == false {
 			go func() {
-				plog.DebugNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				plog.DebugNode(self.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
 					serverConfig.Console.ReconnectInterval, err.Error()))
 				time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
-				common.SafeSend(node.reconnect, struct{}{})
+				common.SafeSend(self.reconnect, struct{}{})
 			}()
 		}
 		return
 	}
 	baseSession, err = consolePlugin.Start()
 	if err != nil {
-		node.status = STATUS_ERROR
-		node.ready <- false
-		if node.StorageNode.Ondemand == false {
+		self.status = STATUS_ERROR
+		self.ready <- false
+		if self.StorageNode.Ondemand == false {
 			go func() {
-				plog.DebugNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
+				plog.DebugNode(self.StorageNode.Name, fmt.Sprintf("Could not start console, wait %d seconds and try again, error:%s",
 					serverConfig.Console.ReconnectInterval, err.Error()))
 				time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
-				common.SafeSend(node.reconnect, struct{}{})
+				common.SafeSend(self.reconnect, struct{}{})
 			}()
 		}
 		return
 	}
-	node.console = NewConsole(baseSession, node)
+	self.console = NewConsole(baseSession, self)
 	// console.Start will block until the console session is closed.
-	node.console.Start()
-	node.console = nil
+	self.console.Start()
+	self.console = nil
 	// only when the Ondemand is false, console session will be restarted automatically
-	if node.StorageNode.Ondemand == false {
+	if self.StorageNode.Ondemand == false {
 		go func() {
-			plog.InfoNode(node.StorageNode.Name, "Start console again due to the ondemand setting.")
+			plog.InfoNode(self.StorageNode.Name, "Start console again due to the ondemand setting.")
 			time.Sleep(time.Duration(serverConfig.Console.ReconnectInterval) * time.Second)
-			common.SafeSend(node.reconnect, struct{}{})
+			common.SafeSend(self.reconnect, struct{}{})
 		}()
 	}
 }
 
 // has lock
-func (node *Node) StartConsole() {
-	if err := node.RequireLock(false); err != nil {
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
+func (self *Node) StartConsole() {
+	if err := self.RequireLock(false); err != nil {
+		plog.ErrorNode(self.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s", err.Error()))
 		return
 	}
-	if node.GetStatus() == STATUS_CONNECTED {
-		node.Release(false)
+	if self.GetStatus() == STATUS_CONNECTED {
+		self.Release(false)
 		return
 	}
-	go node.startConsole()
+	go self.startConsole()
 	// open a new groutine to make the rest request asynchronous
 	go func() {
-		if err := common.TimeoutChan(node.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
-			plog.ErrorNode(node.StorageNode.Name, err)
+		if err := common.TimeoutChan(self.GetReadyChan(), serverConfig.Console.TargetTimeout); err != nil {
+			plog.ErrorNode(self.StorageNode.Name, err)
 		}
-		node.Release(false)
+		self.Release(false)
 	}()
 }
 
-func (node *Node) stopConsole() {
-	if node.console == nil {
-		plog.WarningNode(node.StorageNode.Name, "Console is not started.")
+func (self *Node) stopConsole() {
+	if self.console == nil {
+		plog.WarningNode(self.StorageNode.Name, "Console is not started.")
 		return
 	}
-	node.console.Stop()
-	node.status = STATUS_AVAIABLE
-	node.console = nil
+	self.console.Stop()
+	self.status = STATUS_AVAIABLE
+	self.console = nil
 }
 
 // has lock
-func (node *Node) StopConsole() error {
-	if err := node.RequireLock(false); err != nil {
-		plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Unable to stop console session, error:%v", err))
+func (self *Node) StopConsole() error {
+	if err := self.RequireLock(false); err != nil {
+		plog.ErrorNode(self.StorageNode.Name, fmt.Sprintf("Unable to stop console session, error:%v", err))
 		return err
 	}
-	if node.GetStatus() == STATUS_CONNECTED {
-		node.stopConsole()
+	if self.GetStatus() == STATUS_CONNECTED {
+		self.stopConsole()
 	}
-	node.Release(false)
+	self.Release(false)
 	return nil
 }
 
-func (node *Node) SetStatus(status int) {
-	node.status = status
+func (self *Node) SetStatus(status int) {
+	self.status = status
 }
 
-func (node *Node) GetStatus() int {
-	return node.status
+func (self *Node) GetStatus() int {
+	return self.status
 }
 
-func (node *Node) GetReadyChan() chan bool {
-	return node.ready
+func (self *Node) GetReadyChan() chan bool {
+	return self.ready
 }
 
-func (node *Node) SetLoggingState(state bool) {
-	node.logging = state
+func (self *Node) SetLoggingState(state bool) {
+	self.logging = state
 }
 
-func (node *Node) RequireLock(share bool) error {
-	return common.RequireLock(&node.reserve, node.rwLock, share)
+func (self *Node) RequireLock(share bool) error {
+	return common.RequireLock(&self.reserve, self.rwLock, share)
 }
 
-func (node *Node) Release(share bool) error {
-	return common.ReleaseLock(&node.reserve, node.rwLock, share)
+func (self *Node) Release(share bool) error {
+	return common.ReleaseLock(&self.reserve, self.rwLock, share)
 }
 
 type ConsoleServer struct {
@@ -272,7 +274,7 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 	return &ConsoleServer{host: host, port: port}
 }
 
-func (c *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
+func (self *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
 	var node, command string
 	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
@@ -306,7 +308,7 @@ func (c *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
 	return node, command
 }
 
-func (c *ConsoleServer) redirect(conn interface{}, node string) {
+func (self *ConsoleServer) redirect(conn interface{}, node string) {
 	var err error
 	nodeWithHost := nodeManager.stor.ListNodeWithHost()
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
@@ -332,11 +334,11 @@ func (c *ConsoleServer) redirect(conn interface{}, node string) {
 	plog.InfoNode(node, fmt.Sprintf("Redirect the session to %s", host))
 }
 
-func (c *ConsoleServer) handle(conn interface{}) {
+func (self *ConsoleServer) handle(conn interface{}) {
 	var err error
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	plog.Debug("New client connection received.")
-	name, command := c.getConnectionInfo(conn)
+	name, command := self.getConnectionInfo(conn)
 	if name == "" && command == "" {
 		conn.(net.Conn).Close()
 		return
@@ -353,7 +355,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 			nodeManager.RWlock.RUnlock()
 			return
 		} else {
-			c.redirect(conn, name)
+			self.redirect(conn, name)
 		}
 		nodeManager.RWlock.RUnlock()
 		return
@@ -410,7 +412,7 @@ func (c *ConsoleServer) handle(conn interface{}) {
 	}
 }
 
-func (c *ConsoleServer) Listen() {
+func (self *ConsoleServer) Listen() {
 	var listener net.Listener
 	var err error
 	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
@@ -419,26 +421,26 @@ func (c *ConsoleServer) Listen() {
 		if err != nil {
 			panic(err)
 		}
-		listener, err = tls.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port), tlsConfig)
+		listener, err = tls.Listen("tcp", fmt.Sprintf("%s:%s", self.host, self.port), tlsConfig)
 	} else {
-		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
+		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%s", self.host, self.port))
 	}
 	if err != nil {
 		plog.Error(err)
 		return
 	}
-	c.registerSignal()
+	self.registerSignal()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			plog.Error(err)
 			return
 		}
-		go c.handle(conn)
+		go self.handle(conn)
 	}
 }
 
-func (c *ConsoleServer) registerSignal() {
+func (self *ConsoleServer) registerSignal() {
 	exitHandler := func(s os.Signal, arg interface{}) {
 		plog.Info(fmt.Sprintf("Handle signal: %v\n", s))
 		common.CloseLogger()
@@ -487,7 +489,7 @@ func GetNodeManager() *NodeManager {
 		}
 		nodeManager.stor = stor
 		nodeManager.stor.ImportNodes()
-		nodeManager.fromStorNodes()
+		nodeManager.importStorage()
 		// start loggers
 		nodeManager.pipeline, err = pl.NewPipeline(&serverConfig.Console.Loggers)
 		if err != nil {
@@ -496,7 +498,7 @@ func GetNodeManager() *NodeManager {
 		// for linelogger to send the last buffer
 		go nodeManager.PeriodicTask()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
-		nodeManager.initNodes()
+		nodeManager.initConsole()
 		go nodeManager.PersistWatcher()
 		go consoleServer.Listen()
 		if nodeManager.stor.SupportWatcher() {
@@ -507,12 +509,14 @@ func GetNodeManager() *NodeManager {
 	return nodeManager
 }
 
-func (m *NodeManager) fromStorNodes() {
-	m.RWlock.Lock()
-	for k, v := range m.stor.GetNodes() {
+// Import storage.Nodes to NodeManager.Nodes
+func (self *NodeManager) importStorage() {
+	self.RWlock.Lock()
+	for k, v := range self.stor.GetNodes() {
 		var node *Node
-		if _, ok := m.Nodes[k]; !ok {
-			node = NewNode(v)
+		if _, ok := self.Nodes[k]; !ok {
+			node = NewNodeFromStor(v)
+			node.init()
 		} else {
 			node.StorageNode = v
 		}
@@ -521,26 +525,29 @@ func (m *NodeManager) fromStorNodes() {
 		} else {
 			node.logging = false
 		}
-		m.Nodes[k] = node
+		self.Nodes[k] = node
 	}
-	m.RWlock.Unlock()
+	self.RWlock.Unlock()
 }
 
-func (m *NodeManager) toStorNodes() map[string]*storage.Node {
+// export NodeManager.Nodes to storage.Nodes
+func (self *NodeManager) exportStorage() map[string]*storage.Node {
 	storNodes := make(map[string]*storage.Node)
-	m.RWlock.RLock()
-	for k, v := range m.Nodes {
+	self.RWlock.RLock()
+	for k, v := range self.Nodes {
 		storNodes[k] = v.StorageNode
 	}
-	m.RWlock.RUnlock()
+	self.RWlock.RUnlock()
 	return storNodes
 }
 
-func (m *NodeManager) initNodes() {
-	nodeManager.RWlock.RLock()
-	for _, v := range nodeManager.Nodes {
+// start console if required
+func (self *NodeManager) initConsole() {
+	self.RWlock.RLock()
+	for _, v := range self.Nodes {
+		// node is a pointer, it's ok to init like this。
+		// Can not use v dirrectly as the reference of v would be changed within the iteration. (tricky)
 		node := v
-		node.Init()
 		if node.StorageNode.Ondemand == false {
 			go func() {
 				if err := node.RequireLock(false); err != nil {
@@ -552,7 +559,7 @@ func (m *NodeManager) initNodes() {
 					node.Release(false)
 					return
 				}
-				go node.restartConsole()
+				go node.restartMonitor()
 				go node.startConsole()
 				if err := common.TimeoutChan(node.GetReadyChan(),
 					serverConfig.Console.TargetTimeout); err != nil {
@@ -562,27 +569,27 @@ func (m *NodeManager) initNodes() {
 			}()
 		}
 	}
-	nodeManager.RWlock.RUnlock()
+	self.RWlock.RUnlock()
 }
 
-func (m *NodeManager) ListNode() map[string][]map[string]string {
+func (self *NodeManager) ListNode() map[string][]map[string]string {
 	nodes := make(map[string][]map[string]string)
 	nodes["nodes"] = make([]map[string]string, 0)
-	if !m.stor.SupportWatcher() {
-		m.RWlock.RLock()
-		for _, node := range nodeManager.Nodes {
+	if !self.stor.SupportWatcher() {
+		self.RWlock.RLock()
+		for _, node := range self.Nodes {
 			nodeMap := make(map[string]string)
 			nodeMap["name"] = node.StorageNode.Name
-			nodeMap["host"] = m.hostname
+			nodeMap["host"] = self.hostname
 			nodeMap["state"] = STATUS_MAP[node.GetStatus()]
 			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
-		m.RWlock.RUnlock()
+		self.RWlock.RUnlock()
 	} else {
 		var host string
 		var node string
-		nodeWithHost := m.stor.ListNodeWithHost()
-		hosts := m.stor.GetHosts()
+		nodeWithHost := self.stor.ListNodeWithHost()
+		hosts := self.stor.GetHosts()
 		if hosts == nil {
 			return nodes
 		}
@@ -611,75 +618,83 @@ func (m *NodeManager) ListNode() map[string][]map[string]string {
 	return nodes
 }
 
-func (m *NodeManager) ShowNode(name string) (*Node, int, string) {
+func (self *NodeManager) ShowNode(name string) (*Node, int, string) {
 	var node *Node
-	if !m.stor.SupportWatcher() {
-		if !nodeManager.Exists(name) {
+	if !self.stor.SupportWatcher() {
+		if !self.Exists(name) {
 			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
-		node = nodeManager.Nodes[name]
+		self.RWlock.RLock()
+		node = self.Nodes[name]
+		self.RWlock.RUnlock()
 		node.State = STATUS_MAP[node.GetStatus()]
 	} else {
-		nodeWithHost := m.stor.ListNodeWithHost()
+		nodeWithHost := self.stor.ListNodeWithHost()
 		if nodeWithHost == nil {
 			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
 		if _, ok := nodeWithHost[name]; !ok {
 			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		cRPCClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
-		pbNode, err := cRPCClient.ShowNode(name)
+		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		pbNode, err := rpcClient.ShowNode(name)
 		if err != nil {
 			return nil, http.StatusInternalServerError, err.Error()
 		}
-		node = NewNodeFrom(pbNode)
+		node = NewNodeFromProto(pbNode)
 	}
 	return node, http.StatusOK, ""
 }
 
-func (m *NodeManager) setConsoleState(nodes []string, state string) map[string]string {
+func (self *NodeManager) setConsoleState(nodes []string, state string) map[string]string {
 	result := make(map[string]string)
 	for _, v := range nodes {
 		if v == "" {
 			plog.Error("Skip this record as node name is not defined.")
 			continue
 		}
-		m.RWlock.Lock()
-		if !m.Exists(v) {
+		self.RWlock.Lock()
+		if !self.Exists(v) {
 			msg := "Skip this node as it is not exist."
 			plog.ErrorNode(v, msg)
 			result[v] = msg
-			m.RWlock.Unlock()
+			self.RWlock.Unlock()
 			continue
 		}
-		node := m.Nodes[v]
-		m.RWlock.Unlock()
+		node := self.Nodes[v]
+		self.RWlock.Unlock()
 		if state == CONSOLE_ON {
 			node.logging = true
 			if node.GetStatus() != STATUS_CONNECTED {
 				node.StartConsole()
+				result[v] = common.RESULT_UPDATED
+				continue
 			}
+			result[v] = common.RESULT_UNCHANGED
 		} else if state == CONSOLE_OFF {
 			node.logging = false
 			if node.GetStatus() != STATUS_CONNECTED {
+				result[v] = common.RESULT_UNCHANGED
 				continue
 			}
 			if err := node.StopConsole(); err != nil {
+				result[v] = err.Error()
 				continue
 			}
+			result[v] = common.RESULT_UPDATED
 		}
-		result[v] = "Updated"
+
 	}
 	return result
 }
 
-func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
+func (self *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
 	var host, node string
 	var nodeList []string
-	if !m.stor.SupportWatcher() {
-		return m.setConsoleState(nodes, state)
+	if !self.stor.SupportWatcher() {
+		return self.setConsoleState(nodes, state)
 	}
-	nodeWithHost := nodeManager.stor.ListNodeWithHost()
+	nodeWithHost := self.stor.ListNodeWithHost()
 	hostNodes := make(map[string][]string, 0)
 	for _, node = range nodes {
 		if _, ok := nodeWithHost[node]; !ok {
@@ -704,24 +719,24 @@ func (m *NodeManager) SetConsoleState(nodes []string, state string) map[string]s
 	return result
 }
 
-func (m *NodeManager) PostNode(storNode *storage.Node) (int, string) {
-	if !m.stor.SupportWatcher() {
-		node := NewNode(storNode)
+func (self *NodeManager) PostNode(storNode *storage.Node) (int, string) {
+	if !self.stor.SupportWatcher() {
+		node := NewNodeFromStor(storNode)
 		if err := node.Validate(); err != nil {
 			return http.StatusBadRequest, err.Error()
 		}
-		m.RWlock.Lock()
-		if m.Exists(node.StorageNode.Name) {
-			m.RWlock.Unlock()
+		self.RWlock.Lock()
+		if self.Exists(node.StorageNode.Name) {
+			self.RWlock.Unlock()
 			return http.StatusConflict, fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name)
 		}
 		node.SetStatus(STATUS_ENROLL)
-		m.Nodes[node.StorageNode.Name] = node
-		m.RWlock.Unlock()
-		m.NotifyPersist(nil, common.ACTION_NIL)
+		self.Nodes[node.StorageNode.Name] = node
+		self.RWlock.Unlock()
+		self.NotifyPersist(nil, common.ACTION_NIL)
 		plog.InfoNode(node.StorageNode.Name, "Created.")
 		if node.StorageNode.Ondemand == false {
-			go node.restartConsole()
+			go node.restartMonitor()
 			node.StartConsole()
 
 		}
@@ -729,28 +744,26 @@ func (m *NodeManager) PostNode(storNode *storage.Node) (int, string) {
 		storNodes := make(map[string][]storage.Node)
 		storNodes["nodes"] = make([]storage.Node, 0, 1)
 		storNodes["nodes"] = append(storNodes["nodes"], *storNode)
-		m.NotifyPersist(storNodes, common.ACTION_PUT)
+		self.NotifyPersist(storNodes, common.ACTION_PUT)
 	}
 	return http.StatusAccepted, ""
 }
 
-func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]string) {
-	for _, v := range storNodes {
-		// the silce pointer will be changed with the for loop, create a new variable.
-		if v.Name == "" {
+func (self *NodeManager) postNodes(storNodes []storage.Node, result map[string]string) {
+	for i := 0; i < len(storNodes); i++ {
+		if storNodes[i].Name == "" {
 			plog.Error("Skip this record as node name is not defined.")
 			continue
 		}
-		if v.Driver == "" {
+		if storNodes[i].Driver == "" {
 			msg := "Driver is not defined."
-			plog.ErrorNode(v.Name, msg)
+			plog.ErrorNode(storNodes[i].Name, msg)
 			if result != nil {
-				result[v.Name] = msg
+				result[storNodes[i].Name] = msg
 			}
 			continue
 		}
-		temp := v // the slice in go is a little tricky, use temporary variable to store the value
-		node := NewNode(&temp)
+		node := NewNodeFromStor(&storNodes[i])
 		if err := node.Validate(); err != nil {
 			plog.ErrorNode(node.StorageNode.Name, err.Error())
 			if result != nil {
@@ -758,49 +771,49 @@ func (m *NodeManager) postNodes(storNodes []storage.Node, result map[string]stri
 			}
 			continue
 		}
-		m.RWlock.Lock()
-		if m.Exists(node.StorageNode.Name) {
+		self.RWlock.Lock()
+		if self.Exists(node.StorageNode.Name) {
 			msg := "Skip this node as node is exist."
 			plog.ErrorNode(node.StorageNode.Name, msg)
 			if result != nil {
 				result[node.StorageNode.Name] = msg
 			}
-			m.RWlock.Unlock()
+			self.RWlock.Unlock()
 			continue
 		}
 		node.SetStatus(STATUS_ENROLL)
-		m.Nodes[node.StorageNode.Name] = node
-		m.RWlock.Unlock()
+		self.Nodes[node.StorageNode.Name] = node
+		self.RWlock.Unlock()
 		if result != nil {
-			result[node.StorageNode.Name] = "Created"
+			result[node.StorageNode.Name] = common.RESULT_CREATED
 		}
 		if node.StorageNode.Ondemand == false {
-			go node.restartConsole()
+			go node.restartMonitor()
 			node.StartConsole()
 		}
 	}
 }
 
-func (m *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]string {
+func (self *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]string {
 	result := make(map[string]string)
-	if !m.stor.SupportWatcher() {
-		m.postNodes(storNodes["nodes"], result)
-		m.NotifyPersist(nil, common.ACTION_NIL)
+	if !self.stor.SupportWatcher() {
+		self.postNodes(storNodes["nodes"], result)
+		self.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
 		for _, v := range storNodes["nodes"] {
-			result[v.Name] = "Accept"
+			result[v.Name] = common.RESULT_ACCEPTED
 		}
-		m.NotifyPersist(storNodes, common.ACTION_PUT)
+		self.NotifyPersist(storNodes, common.ACTION_PUT)
 	}
 	return result
 }
 
-func (m *NodeManager) DeleteNode(nodeName string) (int, string) {
-	if !m.stor.SupportWatcher() {
-		nodeManager.RWlock.Lock()
-		node, ok := nodeManager.Nodes[nodeName]
+func (self *NodeManager) DeleteNode(nodeName string) (int, string) {
+	if !self.stor.SupportWatcher() {
+		self.RWlock.Lock()
+		node, ok := self.Nodes[nodeName]
 		if !ok {
-			nodeManager.RWlock.Unlock()
+			self.RWlock.Unlock()
 			return http.StatusBadRequest, fmt.Sprintf("Node %s is not exist", nodeName)
 		}
 		if node.StorageNode.Ondemand == false {
@@ -808,84 +821,83 @@ func (m *NodeManager) DeleteNode(nodeName string) (int, string) {
 		}
 		if node.GetStatus() == STATUS_CONNECTED {
 			if err := node.StopConsole(); err != nil {
-				nodeManager.RWlock.Unlock()
+				self.RWlock.Unlock()
 				return http.StatusConflict, err.Error()
 			}
 		}
-		delete(nodeManager.Nodes, nodeName)
-		nodeManager.RWlock.Unlock()
-		nodeManager.NotifyPersist(nil, common.ACTION_NIL)
+		delete(self.Nodes, nodeName)
+		self.RWlock.Unlock()
+		self.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
 		names := make([]string, 0, 1)
 		names = append(names, nodeName)
-		m.NotifyPersist(names, common.ACTION_DELETE)
+		self.NotifyPersist(names, common.ACTION_DELETE)
 	}
 	return http.StatusAccepted, ""
 }
 
-func (m *NodeManager) deleteNodes(names []string, result map[string]string) {
+func (self *NodeManager) deleteNodes(names []string, result map[string]string) {
 	for _, v := range names {
 		if v == "" {
 			plog.Error("Skip this record as node name is not defined.")
 			continue
 		}
-		name := v
-		nodeManager.RWlock.Lock()
-		if !nodeManager.Exists(name) {
+		self.RWlock.Lock()
+		if !self.Exists(v) {
 			msg := "Skip this node as node is not exist."
-			plog.ErrorNode(name, msg)
+			plog.ErrorNode(v, msg)
 			if result != nil {
-				result[name] = msg
+				result[v] = msg
 			}
-			nodeManager.RWlock.Unlock()
+			self.RWlock.Unlock()
 			continue
 		}
-		node := nodeManager.Nodes[name]
+		node := self.Nodes[v]
 		if node.StorageNode.Ondemand == false {
 			close(node.reconnect)
 		}
 		if node.GetStatus() == STATUS_CONNECTED {
 			if err := node.StopConsole(); err != nil {
-				nodeManager.RWlock.Unlock()
+				self.RWlock.Unlock()
 				continue
 			}
 		}
-		delete(nodeManager.Nodes, name)
-		nodeManager.RWlock.Unlock()
+		delete(self.Nodes, v)
+		self.RWlock.Unlock()
 		if result != nil {
-			result[name] = "Deleted"
+			result[v] = common.RESULT_DELETED
 		}
 	}
 }
 
-func (m *NodeManager) DeleteNodes(names []string) map[string]string {
+func (self *NodeManager) DeleteNodes(names []string) map[string]string {
 	result := make(map[string]string)
-	if !m.stor.SupportWatcher() {
-		m.deleteNodes(names, result)
-		m.NotifyPersist(nil, common.ACTION_NIL)
+	if !self.stor.SupportWatcher() {
+		self.deleteNodes(names, result)
+		self.NotifyPersist(nil, common.ACTION_NIL)
 	} else {
 		for _, name := range names {
-			result[name] = "Accept"
+			result[name] = common.RESULT_ACCEPTED
 		}
-		m.NotifyPersist(names, common.ACTION_DELETE)
+		self.NotifyPersist(names, common.ACTION_DELETE)
 	}
 	return result
 }
 
-func (m *NodeManager) Replay(name string) (string, int, string) {
+func (self *NodeManager) Replay(name string) (string, int, string) {
 	var content string
 	var err error
-	if !m.stor.SupportWatcher() {
-		if !m.Exists(name) {
+	if !self.stor.SupportWatcher() {
+		if !self.Exists(name) {
 			return "", http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
 		// TODO: make replaylines more flexible
-		content, err = nodeManager.pipeline.Fetch(name, serverConfig.Console.ReplayLines)
+		content, err = self.pipeline.Fetch(name, serverConfig.Console.ReplayLines)
 		if err != nil {
 			return "", http.StatusInternalServerError, err.Error()
 		}
 	} else {
-		nodeWithHost := m.stor.ListNodeWithHost()
+		nodeWithHost := self.stor.ListNodeWithHost()
 		if nodeWithHost == nil {
 			return "", http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
@@ -901,22 +913,22 @@ func (m *NodeManager) Replay(name string) (string, int, string) {
 	return content, http.StatusOK, ""
 }
 
-func (m *NodeManager) ListUser(name string) (map[string][]string, int, string) {
+func (self *NodeManager) ListUser(name string) (map[string][]string, int, string) {
 	var node *Node
 	var users []string
 	var err error
 	var ok bool
 	ret := make(map[string][]string)
-	if !m.stor.SupportWatcher() {
-		m.RWlock.RLock()
-		if node, ok = m.Nodes[name]; !ok {
-			m.RWlock.RUnlock()
+	if !self.stor.SupportWatcher() {
+		self.RWlock.RLock()
+		if node, ok = self.Nodes[name]; !ok {
+			self.RWlock.RUnlock()
 			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
-		m.RWlock.RUnlock()
+		self.RWlock.RUnlock()
 		users = node.console.ListSessionUser()
 	} else {
-		nodeWithHost := m.stor.ListNodeWithHost()
+		nodeWithHost := self.stor.ListNodeWithHost()
 		if nodeWithHost == nil {
 			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
@@ -933,29 +945,29 @@ func (m *NodeManager) ListUser(name string) (map[string][]string, int, string) {
 	return ret, http.StatusOK, ""
 }
 
-func (m *NodeManager) NotifyPersist(node interface{}, action int) {
-	if !m.stor.SupportWatcher() {
-		storNodes := m.toStorNodes()
-		m.stor.NotifyPersist(storNodes, common.ACTION_NIL)
+func (self *NodeManager) NotifyPersist(node interface{}, action int) {
+	if !self.stor.SupportWatcher() {
+		storNodes := self.exportStorage()
+		self.stor.NotifyPersist(storNodes, common.ACTION_NIL)
 		return
 	}
-	m.stor.NotifyPersist(node, action)
+	self.stor.NotifyPersist(node, action)
 }
 
-func (m *NodeManager) Exists(nodeName string) bool {
-	if _, ok := m.Nodes[nodeName]; ok {
+func (self *NodeManager) Exists(nodeName string) bool {
+	if _, ok := self.Nodes[nodeName]; ok {
 		return true
 	}
 	return false
 }
 
-func (m *NodeManager) PersistWatcher() {
-	if !m.stor.SupportWatcher() {
-		m.stor.PersistWatcher(nil)
+func (self *NodeManager) PersistWatcher() {
+	if !self.stor.SupportWatcher() {
+		self.stor.PersistWatcher(nil)
 		return
 	}
 	eventChan := make(chan map[int][]byte, 1024)
-	go m.stor.PersistWatcher(eventChan)
+	go self.stor.PersistWatcher(eventChan)
 	for {
 		select {
 		case eventMap := <-eventChan:
@@ -967,12 +979,12 @@ func (m *NodeManager) PersistWatcher() {
 				}
 				storNodes := make([]storage.Node, 0, 1)
 				storNodes = append(storNodes, *storNode)
-				m.postNodes(storNodes, nil)
+				self.postNodes(storNodes, nil)
 			} else if _, ok := eventMap[common.ACTION_DELETE]; ok {
 				name := string(eventMap[common.ACTION_DELETE])
 				names := make([]string, 0, 1)
 				names = append(names, name)
-				m.deleteNodes(names, nil)
+				self.deleteNodes(names, nil)
 			} else {
 				plog.Error("Internal error")
 			}
@@ -981,8 +993,8 @@ func (m *NodeManager) PersistWatcher() {
 }
 
 // for linelogger to send the last buffer
-func (m *NodeManager) PeriodicTask() {
-	if m.pipeline.Periodic == false {
+func (self *NodeManager) PeriodicTask() {
+	if self.pipeline.Periodic == false {
 		return
 	}
 	plog.Info("Starting peridic task")
@@ -992,8 +1004,8 @@ func (m *NodeManager) PeriodicTask() {
 		current := time.Now()
 		plog.Debug("Periodic task is running")
 		readyList := make([]*ReadyBuffer, 0)
-		m.RWlock.RLock()
-		for k, v := range m.Nodes {
+		self.RWlock.RLock()
+		for k, v := range self.Nodes {
 			console := v.console
 			if console == nil {
 				continue
@@ -1003,9 +1015,9 @@ func (m *NodeManager) PeriodicTask() {
 				readyList = append(readyList, readyBuf)
 			}
 		}
-		m.RWlock.RUnlock()
+		self.RWlock.RUnlock()
 		for _, readyBuf := range readyList {
-			m.pipeline.PromptLast(readyBuf.node, readyBuf.last)
+			self.pipeline.PromptLast(readyBuf.node, readyBuf.last)
 		}
 	}
 }

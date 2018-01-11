@@ -56,6 +56,12 @@ func KeyValueToMap(value string, sep string) (map[string]interface{}, error) {
 	return m, nil
 }
 
+func printResult(m interface{}) {
+	for k, v := range m.(map[string]interface{}) {
+		fmt.Printf("%s: %s\n", k, v.(string))
+	}
+}
+
 type nodeHost struct {
 	name  string
 	host  string
@@ -191,11 +197,12 @@ func (c *CongoCli) logging(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Usage: congo logging <node> on/off \n")
 		os.Exit(1)
 	}
-	_, err := congo.Logging(args[0], args[1])
+	ret, err := congo.Logging(args[0], args[1])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
+	printResult(ret)
 }
 
 func (c *CongoCli) deleteCommand() *cobra.Command {

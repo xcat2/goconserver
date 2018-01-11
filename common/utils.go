@@ -27,6 +27,12 @@ const (
 	ACTION_NIL    = -1
 
 	Maxint32 = 1<<31 - 1
+
+	RESULT_DELETED   = "Deleted"
+	RESULT_ACCEPTED  = "Accepted"
+	RESULT_UPDATED   = "Updated"
+	RESULT_UNCHANGED = "Unchanged"
+	RESULT_CREATED   = "Created"
 )
 
 var (
