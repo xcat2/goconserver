@@ -20,6 +20,29 @@ func init() {
 	LOGGER_INIT_MAP[BYTE_LOGGER] = NewByteLogger
 }
 
+func NewLineBuf(Type string, message string, node string, LogTimestamp bool) *LineBuf {
+	buf := &LineBuf{Type: Type, Message: message, Node: node}
+	if LogTimestamp {
+		buf.Date = time.Now().Format("2006-01-02 15:04:05.00000")
+	}
+	return buf
+}
+
+type LineBuf struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Node    string `json:"node"`
+	Date    string `json:"date,omitempty"`
+}
+
+func (self *LineBuf) Marshal() ([]byte, error) {
+	buf, err := json.Marshal(self)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
 func NewLineLogger() Logger {
 	logger := LineLogger{
 		publishers: make([]Publisher, 0),
@@ -47,23 +70,13 @@ func (self *LineLogger) MakeRecord(node string, b []byte, last *RemainBuffer) er
 	}
 	for i := 0; i < len(b); i++ {
 		if b[i] == '\n' {
-			var line bytes.Buffer
-			line.Write(b[p:i])
-			bufMap := make(map[string]string)
-			bufMap["type"] = CONSOLE_TYPE
-			bufMap["message"] = line.String()
-			bufMap["node"] = node
-
-			if serverConfig.Console.LogTimestamp {
-				bufMap["date"] = time.Now().Format("2006-01-02 15:04:05.00000")
-			}
+			lineBuf := NewLineBuf(CONSOLE_TYPE, string(b[p:i]), node, serverConfig.Console.LogTimestamp)
 			p = i + 1
-			buf, err = json.Marshal(bufMap)
+			buf, err = lineBuf.Marshal()
 			if err != nil {
 				plog.ErrorNode(node, err)
 				continue
 			}
-			line.Reset()
 			self.bufChan <- append(buf, []byte{'\n'}...)
 		}
 	}
@@ -75,15 +88,12 @@ func (self *LineLogger) PromptLast(node string, last *RemainBuffer) error {
 	var err error
 	var buf []byte
 	if last.Buf != nil {
-		bufMap := make(map[string]string)
-		bufMap["message"] = string(last.Buf)
-		// check again after copy
-		if bufMap["message"] == "" {
+		message := string(last.Buf)
+		if message == "" {
 			return nil
 		}
-		bufMap["type"] = REMAIN_TYPE
-		bufMap["node"] = node
-		buf, err = json.Marshal(bufMap)
+		lineBuf := NewLineBuf(REMAIN_TYPE, message, node, serverConfig.Console.LogTimestamp)
+		buf, err = lineBuf.Marshal()
 		if err != nil {
 			plog.ErrorNode(node, err)
 			return err
@@ -118,14 +128,8 @@ func (self *LineLogger) Fetch(node string, count int) (string, error) {
 func (self *LineLogger) Prompt(node string, message string) error {
 	var err error
 	var buf []byte
-	bufMap := make(map[string]string)
-	bufMap["type"] = EVENT_TYPE
-	bufMap["message"] = message
-	bufMap["node"] = node
-	if serverConfig.Console.LogTimestamp {
-		bufMap["date"] = time.Now().Format("2006-01-02 15:04:05.00000")
-	}
-	buf, err = json.Marshal(bufMap)
+	lineBuf := NewLineBuf(EVENT_TYPE, message, node, serverConfig.Console.LogTimestamp)
+	buf, err = lineBuf.Marshal()
 	if err != nil {
 		plog.ErrorNode(node, err)
 		return err
