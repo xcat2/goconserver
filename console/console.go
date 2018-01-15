@@ -198,8 +198,13 @@ func (self *Console) writeClientChan(buf []byte) {
 	b := make([]byte, len(buf))
 	copy(b, buf)
 	self.mutex.RLock()
-	for _, v := range self.bufConn {
-		v <- b
+	for k, v := range self.bufConn {
+		select {
+		case v <- b:
+		case <-time.After(500 * time.Millisecond):
+			plog.WarningNode(self.node.StorageNode.Name,
+				fmt.Sprintf("Timeout for waiting client %s", k.RemoteAddr().String()))
+		}
 	}
 	self.mutex.RUnlock()
 }
