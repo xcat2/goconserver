@@ -1,16 +1,36 @@
 ## goconserver
 
-`goconserver` is written in golang and is a part of microservice of
-[xcat3](https://github.com/chenglch/xcat3). It can work as a independent
-tool to provide the terminal session service. Terminal session could run in
-the background and help logging the terminal content.
+`goconserver` is written in golang which intend to replace the `conserver`
+which used in [xcat2](https://github.com/xcat2/xcat-core). The microservice
+design makes it easy to integrate with other tool which hope to log the
+terminal sessions. It can also work independently through command line or rest
+api interface.
 
-### Support plugin
-`goconserver` intent to support multiple types of terminal plugins, currently
-`ssh` is support as OpenBMC use `ssh` as the SOL method and `cmd` is a general
-driver to support command session.
+![preview](/goconserver.gif)
 
-### Structure
+### Terminal plugins
+
+- ssh: SSH driver start ssh session within goruntine, no external process, to
+       support a large number of OpenBMC[openbmc](https://github.com/openbmc)
+       consoles with high performance.
+
+- cmd: A general driver to redirect the command input and output. Any console
+       could be supported.
+
+### Output plugins:
+
+- file: Store the terminal session in files for different hosts.
+- tcp:  Send the console line (splitted) in json format to the remote target
+        with tcp method.
+- udp:  Send the console line (splitted) in json format to the remote target
+        with udp method.
+
+### Storage plugins
+
+- file: Store the host information in a json file.
+- etcd: Support goconserver cluster [experimental].
+
+### Design Structure
 `goconserver` can be divided into two parts:
 - daemon part: `goconserver`, expose rest api interface to define and control
   the session node.
@@ -68,7 +88,8 @@ Please refer to [ssl](/scripts/ssl/)
 
 ### Start service
 ```
-goconserver &
+goconserver &                     # for debug
+service goconserver start         # only support systemd system
 ```
 ### Define testnode node session
 congo is the client command. Use congo help to see the detail.
