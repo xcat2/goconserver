@@ -1,6 +1,7 @@
 package console
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/chenglch/goconserver/common"
 	pl "github.com/chenglch/goconserver/console/pipeline"
@@ -12,7 +13,6 @@ import (
 )
 
 const (
-	ExitSequence      = "\x05c." // ctrl-e, c
 	CLIENT_CMD_EXIT   = '.'
 	CLIENT_CMD_HELP   = '?'
 	CLIENT_CMD_REPLAY = 'r'
@@ -20,7 +20,8 @@ const (
 )
 
 var (
-	CLIENT_CMDS = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY, CLIENT_CMD_WHO}
+	CLIENT_CMDS   = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY, CLIENT_CMD_WHO}
+	EXIT_SEQUENCE = [...]byte{'\x05', 'c', '.'} // ctrl-e, c
 )
 
 type Console struct {
@@ -97,7 +98,7 @@ func (self *Console) writeTarget(conn net.Conn) {
 			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
 			return
 		}
-		if string(b) == ExitSequence {
+		if bytes.Equal(b, EXIT_SEQUENCE[0:]) {
 			plog.InfoNode(self.node.StorageNode.Name, "Received exit signal from client")
 			return
 		}

@@ -81,7 +81,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	}
 	exit, pos := c.checkEscape(b, n, node)
 	if exit == true {
-		b = []byte(ExitSequence)
+		b = EXIT_SEQUENCE[0:]
 		n = len(b)
 		c.retry = false
 		printConsoleDisconnectPrompt()

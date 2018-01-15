@@ -80,6 +80,15 @@ func (self *LineLogger) MakeRecord(node string, b []byte, last *RemainBuffer) er
 			self.bufChan <- append(buf, []byte{'\n'}...)
 		}
 	}
+	if len(b[p:]) >= 4096 {
+		lineBuf := NewLineBuf(CONSOLE_TYPE, string(b[p:]), node, serverConfig.Console.LogTimestamp)
+		buf, err = lineBuf.Marshal()
+		if err != nil {
+			plog.ErrorNode(node, err)
+		}
+		self.bufChan <- append(buf, []byte{'\n'}...)
+		p = len(b)
+	}
 	copyLast(last, b[p:])
 	return nil
 }
@@ -139,7 +148,7 @@ func (self *LineLogger) Prompt(node string, message string) error {
 }
 
 func (self *LineLogger) run() {
-	var buf bytes.Buffer
+	buf := new(bytes.Buffer)
 	plog.Debug("Starting line logger")
 	ticker := time.NewTicker(common.PIPELINE_SEND_INTERVAL)
 	// timeout may block data
@@ -147,11 +156,17 @@ func (self *LineLogger) run() {
 		select {
 		case b := <-self.bufChan:
 			buf.Write(b)
+			if buf.Len() > 8192 {
+				// too large, send immediately
+				self.emit(buf.Bytes())
+				// slice in channel is transferred by reference
+				buf = new(bytes.Buffer)
+			}
 		case <-ticker.C:
 			if buf.Len() > 0 {
 				// send buf to the channel
 				self.emit(buf.Bytes())
-				buf.Reset()
+				buf = new(bytes.Buffer)
 			}
 		}
 	}
