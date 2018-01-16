@@ -116,6 +116,11 @@ func (c *ConsoleClient) output(args ...interface{}) {
 	for n > 0 {
 		tmp, err := os.Stdout.Write(b)
 		if err != nil {
+			if pathErr, ok := err.(*os.PathError); ok {
+				if pathErr.Err == syscall.EAGAIN || pathErr.Err == syscall.EWOULDBLOCK {
+					continue
+				}
+			}
 			if c.retry == true && c.reported == false {
 				printConsoleSendErr(err)
 			}
