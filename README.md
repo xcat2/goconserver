@@ -2,20 +2,27 @@
 
 `goconserver` is written in golang which intend to replace the `conserver`
 which used in [xcat2](https://github.com/xcat2/xcat-core). The microservice
-design makes it easy to integrate with other tool which hope to log the
+based design makes it easy to integrate with other tool which hope to log the
 terminal sessions. It can also work independently through command line or rest
 api interface.
 
 ![preview](/goconserver.gif)
 
+## Key Features
+
+- Manage the lifecycle of seesion hosts via REST or BULK REST interface.
+- Interface based desgin, support multiple types of terminal, storage and
+  output plugin. Multiple output plugins could work together.
+- Multiple client could share one host session.
+
 ### Terminal plugins
 
-- ssh: SSH driver start ssh session within goruntine, no external process, to
-       support a large number of OpenBMC[openbmc](https://github.com/openbmc)
-       consoles with high performance.
+- ssh: SSH driver start ssh session within goruntine, As no external process,
+       goconserver could support a large number of OpenBMC
+       [openbmc](https://github.com/openbmc) consoles with high performance.
 
-- cmd: A general driver to redirect the command input and output. Any console
-       could be supported.
+- cmd: A general driver to help redirect the command input and output. Any
+       shell based terminal type could be supported.
 
 ### Output plugins:
 
@@ -40,11 +47,10 @@ api interface.
 
 ## Setup goconserver from release
 
-Download the tarball for release from
-[goconserver](https://github.com/chenglch/goconserver/releases), take the
-release for amd64 architecture as a example.
+### Setup goconserver from binary
+Download the binary tarball for release from
+[goconserver](https://github.com/chenglch/goconserver/releases)
 ```
-wget https://github.com/chenglch/goconserver/files/1437496/goconserver_linux_amd64.tar.gz
 tar xvfz goconserver_linux_amd64.tar.gz
 cd goconserver_linux_amd64
 ./setup.sh
@@ -63,6 +69,13 @@ environment, then try the `congo` command.
 ```
 source /etc/profile.d/congo.sh
 congo list
+```
+### Setup goconserver from rpm or deb
+
+```
+tar xvfz <tarball for rpm or deb>
+yum install <rpm>
+dpkg -i <deb>
 ```
 
 ## Development
