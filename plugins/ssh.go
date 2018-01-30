@@ -82,90 +82,90 @@ func NewSSHConsole(node string, params map[string]string) (ConsolePlugin, error)
 	return &sshConsole, nil
 }
 
-func (s *SSHConsole) appendPrivateKeyAuthMethod(autoMethods *[]ssh.AuthMethod) {
-	if s.privateKeyFile != "" {
-		key, err := ioutil.ReadFile(s.privateKeyFile)
+func (self *SSHConsole) appendPrivateKeyAuthMethod(autoMethods *[]ssh.AuthMethod) {
+	if self.privateKeyFile != "" {
+		key, err := ioutil.ReadFile(self.privateKeyFile)
 		if err != nil {
-			log.Printf("host:%s\tThe private key file %s can not be parsed, Error:%s", s.host, s.privateKeyFile, err)
+			log.Printf("host:%s\tThe private key file %s can not be parsed, Error:%s", self.host, self.privateKeyFile, err)
 			return
 		}
 
 		signer, err := ssh.ParsePrivateKey([]byte(key))
 		if err != nil {
-			log.Printf("host:%s\tThe private key file %s can not be parsed, Error:%s", s.host, s.privateKeyFile, err)
+			log.Printf("host:%s\tThe private key file %s can not be parsed, Error:%s", self.host, self.privateKeyFile, err)
 			return
 		}
 		*autoMethods = append(*autoMethods, ssh.PublicKeys(signer))
 	}
 }
 
-func (s *SSHConsole) appendPasswordAuthMethod(autoMethods *[]ssh.AuthMethod) {
-	if s.password != "" {
-		*autoMethods = append(*autoMethods, ssh.Password(s.password))
+func (self *SSHConsole) appendPasswordAuthMethod(autoMethods *[]ssh.AuthMethod) {
+	if self.password != "" {
+		*autoMethods = append(*autoMethods, ssh.Password(self.password))
 	}
 }
 
-func (s *SSHConsole) keepSSHAlive(cl *ssh.Client, conn net.Conn) error {
+func (self *SSHConsole) keepSSHAlive(cl *ssh.Client, conn net.Conn) error {
 	const keepAliveInterval = time.Minute
 	t := time.NewTicker(keepAliveInterval)
 	defer t.Stop()
 	for {
-		plog.DebugNode(s.node, "Keep alive goroutine for ssh connection started")
+		plog.DebugNode(self.node, "Keep alive goroutine for ssh connection started")
 		deadline := time.Now().Add(keepAliveInterval).Add(15 * time.Second)
 		err := conn.SetDeadline(deadline)
 		if err != nil {
-			plog.ErrorNode(s.node, "Failed to set deadline for ssh connection")
+			plog.ErrorNode(self.node, "Failed to set deadline for ssh connection")
 			return common.ErrSetDeadline
 		}
 		select {
 		case <-t.C:
 			_, _, err = cl.SendRequest("keepalive@golang.org", true, nil)
 			if err != nil {
-				plog.ErrorNode(s.node, "Faild to send keepalive request")
+				plog.ErrorNode(self.node, "Faild to send keepalive request")
 				return common.ErrSendKeepalive
 			}
-		case <-s.exit:
-			plog.DebugNode(s.node, "Exit keepalive goroutine")
+		case <-self.exit:
+			plog.DebugNode(self.node, "Exit keepalive goroutine")
 			return nil
 		}
 	}
 }
 
-func (s *SSHConsole) connectToHost() error {
+func (self *SSHConsole) connectToHost() error {
 	var err error
 	timeout := 5 * time.Second
 	autoMethods := make([]ssh.AuthMethod, 0)
-	s.appendPrivateKeyAuthMethod(&autoMethods)
-	s.appendPasswordAuthMethod(&autoMethods)
+	self.appendPrivateKeyAuthMethod(&autoMethods)
+	self.appendPasswordAuthMethod(&autoMethods)
 	sshConfig := &ssh.ClientConfig{
-		User:            s.user,
+		User:            self.user,
 		Auth:            autoMethods,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         timeout,
 	}
-	conn, err := net.DialTimeout("tcp", s.host, timeout)
+	conn, err := net.DialTimeout("tcp", self.host, timeout)
 	if err != nil {
 		return err
 	}
-	c, chans, reqs, err := ssh.NewClientConn(conn, s.host, sshConfig)
+	c, chans, reqs, err := ssh.NewClientConn(conn, self.host, sshConfig)
 	if err != nil {
 		return err
 	}
-	s.client = ssh.NewClient(c, chans, reqs)
-	go s.keepSSHAlive(s.client, conn)
-	s.session, err = s.client.NewSession()
+	self.client = ssh.NewClient(c, chans, reqs)
+	go self.keepSSHAlive(self.client, conn)
+	self.session, err = self.client.NewSession()
 	if err != nil {
-		s.Close()
+		self.Close()
 		return err
 	}
 	return nil
 }
 
-func (s *SSHConsole) startConsole() (*BaseSession, error) {
+func (self *SSHConsole) startConsole() (*BaseSession, error) {
 	tty := common.Tty{}
 	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		plog.DebugNode(s.node, "Could not get tty size, use 80,80 as default")
+		plog.DebugNode(self.node, "Could not get tty size, use 80,80 as default")
 		ttyHeight = 80
 		ttyWidth = 80
 	}
@@ -174,55 +174,55 @@ func (s *SSHConsole) startConsole() (*BaseSession, error) {
 		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
-	if err := s.session.RequestPty("xterm-256color", ttyWidth, ttyHeight, modes); err != nil {
-		plog.ErrorNode(s.node, err.Error())
+	if err := self.session.RequestPty("xterm-256color", ttyWidth, ttyHeight, modes); err != nil {
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
-	sshIn, err := s.session.StdinPipe()
+	sshIn, err := self.session.StdinPipe()
 	if err != nil {
-		plog.ErrorNode(s.node, err.Error())
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
-	sshOut, err := s.session.StdoutPipe()
+	sshOut, err := self.session.StdoutPipe()
 	if err != nil {
-		plog.ErrorNode(s.node, err.Error())
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
 	// Start remote shell
-	if err := s.session.Shell(); err != nil {
-		plog.ErrorNode(s.node, err.Error())
+	if err := self.session.Shell(); err != nil {
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
-	return &BaseSession{In: sshIn, Out: sshOut, Session: s}, nil
+	return &BaseSession{In: sshIn, Out: sshOut, Session: self}, nil
 }
 
-func (s *SSHConsole) Start() (*BaseSession, error) {
-	err := s.connectToHost()
+func (self *SSHConsole) Start() (*BaseSession, error) {
+	err := self.connectToHost()
 	if err != nil {
-		plog.ErrorNode(s.node, err.Error())
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
-	baseSession, err := s.startConsole()
+	baseSession, err := self.startConsole()
 	if err != nil {
-		plog.ErrorNode(s.node, err.Error())
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
 	return baseSession, nil
 }
 
-func (s *SSHConsole) Close() error {
-	if s.client != nil {
-		common.SafeClose(s.exit)
-		err := s.client.Close()
-		s.client = nil
+func (self *SSHConsole) Close() error {
+	if self.client != nil {
+		common.SafeClose(self.exit)
+		err := self.client.Close()
+		self.client = nil
 		return err
 	}
 	return nil
 }
 
-func (s *SSHConsole) Wait() error {
-	if s.session != nil {
-		return s.session.Wait()
+func (self *SSHConsole) Wait() error {
+	if self.session != nil {
+		return self.session.Wait()
 	}
 	return nil
 }

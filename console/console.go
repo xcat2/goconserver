@@ -210,8 +210,13 @@ func (self *Console) writeClientChan(buf []byte) {
 }
 
 func (self *Console) Start() {
+	var err error
 	defer func() {
-		self.node.status = STATUS_AVAIABLE
+		if err == nil {
+			self.node.status = STATUS_AVAIABLE
+		} else {
+			self.node.status = STATUS_ERROR
+		}
 	}()
 	plog.DebugNode(self.node.StorageNode.Name, "Start console session.")
 	self.running = make(chan bool, 0)
@@ -224,8 +229,11 @@ func (self *Console) Start() {
 			plog.WarningNode(self.node.StorageNode.Name, r)
 		}
 	}()
-	self.session.Wait()
-	self.session.Close()
+	if err = self.session.Wait(); err != nil {
+		self.session.Close()
+	} else {
+		err = self.session.Close()
+	}
 }
 
 // called from rest api to stop the console session
@@ -266,7 +274,9 @@ func (self *Console) Close() {
 		close(self.running)
 		self.running = nil
 	}
-	self.node.status = STATUS_AVAIABLE
+	if self.node.status == STATUS_CONNECTED {
+		self.node.status = STATUS_AVAIABLE
+	}
 	self.node.console = nil
 	self.session.Close()
 	self.session = nil

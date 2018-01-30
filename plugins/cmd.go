@@ -10,13 +10,15 @@ import (
 )
 
 const (
-	DRIVER_CMD = "cmd"
+	DRIVER_CMD  = "cmd"
+	DEFAULT_ENV = "CONSOLE_TYPE=gocons"
 )
 
 type CommondConsole struct {
 	node    string // session name
 	cmd     string
 	params  []string
+	envs    []string
 	command *exec.Cmd
 	pty     *os.File
 }
@@ -32,38 +34,49 @@ func init() {
 }
 
 func NewCommondConsole(node string, params map[string]string) (ConsolePlugin, error) {
+	var env string
+	var envs = []string{DEFAULT_ENV}
 	cmd := params["cmd"]
 	args := strings.Split(cmd, " ")
-	return &CommondConsole{node: node, cmd: args[0], params: args[1:]}, nil
+	// environment variables, format like "CONSOLE_TYPE=gocons DEBUG=true"
+	if env, _ = params["env"]; env != "" {
+		envs = append(envs, strings.Split(env, " ")...)
+	}
+	return &CommondConsole{
+		node:   node,
+		cmd:    args[0],
+		params: args[1:],
+		envs:   envs}, nil
 }
 
-func (c *CommondConsole) Start() (*BaseSession, error) {
+func (self *CommondConsole) Start() (*BaseSession, error) {
 	var err error
-	c.command = exec.Command(c.cmd, c.params...)
-	c.pty, err = pty.Start(c.command)
+	self.command = exec.Command(self.cmd, self.params...)
+	self.command.Env = append(os.Environ(), self.envs...)
+	self.pty, err = pty.Start(self.command)
 	if err != nil {
-		plog.ErrorNode(c.node, err.Error())
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
 	tty := common.Tty{}
 	ttyWidth, ttyHeight, err := tty.GetSize(os.Stdin)
 	if err != nil {
-		plog.DebugNode(c.node, "Could not get tty size, use 80,80 as default")
+		plog.DebugNode(self.node, "Could not get tty size, use 80,80 as default")
 		ttyHeight = 80
 		ttyWidth = 80
 	}
-	if err = tty.SetSize(c.pty, ttyWidth, ttyHeight); err != nil {
-		plog.ErrorNode(c.node, err.Error())
+	if err = tty.SetSize(self.pty, ttyWidth, ttyHeight); err != nil {
+		plog.ErrorNode(self.node, err.Error())
 		return nil, err
 	}
-	return &BaseSession{In: c.pty, Out: c.pty, Session: c}, nil
+	return &BaseSession{In: self.pty, Out: self.pty, Session: self}, nil
 }
 
-func (c *CommondConsole) Close() error {
-	c.pty.Close()
-	return c.command.Process.Kill()
+func (self *CommondConsole) Close() error {
+	self.pty.Close()
+	return self.command.Process.Kill()
 }
 
-func (c *CommondConsole) Wait() error {
-	return c.command.Wait()
+func (self *CommondConsole) Wait() error {
+	return self.command.Wait()
 }
