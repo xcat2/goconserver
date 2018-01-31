@@ -44,6 +44,11 @@ var (
 		"yes":  true,
 		"y":    true,
 	}
+	PRECISION_FORMAT = map[string]string{
+		"second":      "2006-01-02 15:04:05",
+		"millisecond": "2006-01-02 15:04:05.000",
+		"microsecond": "2006-01-02 15:04:05.000000",
+		"nanosecond":  "2006-01-02 15:04:05.000000000"}
 )
 
 type FileCfg struct {
@@ -94,6 +99,8 @@ type ServerConfig struct {
 		Port              string    `yaml:"port"`
 		DataDir           string    `yaml:"datadir"`
 		LogTimestamp      bool      `yaml:"log_timestamp"`
+		TimePrecision     string    `yaml:"time_precision"`
+		TimeFormat        string    `yaml:"-"`
 		ReplayLines       int       `yaml:"replay_lines"`
 		ClientTimeout     int       `yaml:"client_timeout"`
 		TargetTimeout     int       `yaml:"target_timeout"`
@@ -120,6 +127,8 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
 	serverConfig.Console.LogTimestamp = true
+	serverConfig.Console.TimePrecision = "microsecond"
+	serverConfig.Console.TimeFormat = "2006-01-02 15:04:05.000000"
 	serverConfig.Console.ReplayLines = 30
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
@@ -148,6 +157,11 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 		if serverConfig.Console.Loggers.UDP[i].Timeout == 0 {
 			serverConfig.Console.Loggers.UDP[i].Timeout = 3
 		}
+	}
+	if format, ok := PRECISION_FORMAT[serverConfig.Console.TimePrecision]; ok {
+		serverConfig.Console.TimeFormat = format
+	} else {
+		plog.Error("TimePrecision configuration is not valied, use microsecond by default")
 	}
 	CONF_FILE = confFile
 	return serverConfig, nil

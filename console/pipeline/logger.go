@@ -23,7 +23,7 @@ func init() {
 func NewLineBuf(Type string, message string, node string, LogTimestamp bool) *LineBuf {
 	buf := &LineBuf{Type: Type, Message: message, Node: node}
 	if LogTimestamp {
-		buf.Date = time.Now().Format("2006-01-02 15:04:05.00000")
+		buf.Date = time.Now().Format(serverConfig.Console.TimeFormat)
 	}
 	return buf
 }
