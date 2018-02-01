@@ -93,7 +93,7 @@ exit_if_bad "$?" "Command not found - checkinstall"
 checkinstall --arch "${ARCH}" -D -y \
 	--pkgname goconserver \
 	--pkglicense EPL \
-	--pkgversion 0.2.0 \
+	--pkgversion 0.2.1 \
 	--pkgrelease "snap$(date '+%Y%m%d%H%M')" \
 	--maintainer "gongjie@linux.vnet.ibm.com" \
 	--requires libc6 \

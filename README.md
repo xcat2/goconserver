@@ -82,7 +82,8 @@ dpkg -i <deb>
 
 ### Requirement
 
-Please setup golang SDK, GOPATH environment variable and glide tool at first.
+Please setup golang SDK(1.9 or higher), GOPATH environment variable and
+[glide](https://github.com/Masterminds/glide) tool at first.
 
 ### Build and install
 
