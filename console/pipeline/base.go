@@ -35,8 +35,9 @@ type Publisher interface {
 }
 
 type RemainBuffer struct {
-	Buf      []byte
-	Deadline time.Time
+	Buf      []byte    // only used by line logger
+	Deadline time.Time // only used by line logger
+	NewLine  bool      // only used by byte logger
 }
 
 type BasePublisher struct {

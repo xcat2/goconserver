@@ -195,7 +195,7 @@ func (self *ByteLogger) Register(publisher Publisher) {
 	self.publishers = append(self.publishers, publisher)
 }
 
-func (self *ByteLogger) insertStamp(b []byte) ([]byte, error) {
+func (self *ByteLogger) insertStamp(b []byte, newLine *bool) ([]byte, error) {
 	var buf bytes.Buffer
 	p := 0
 	defer func() {
@@ -205,9 +205,13 @@ func (self *ByteLogger) insertStamp(b []byte) ([]byte, error) {
 		}
 	}()
 	for i := 0; i < len(b); i++ {
-		if b[i] == '\n' {
-			buf.Write(b[p:i]) // ignore retnru value as err is always nil
+		if *newLine {
 			buf.WriteString("\n[" + time.Now().Format("2006-01-02 15:04:05") + "] ")
+			*newLine = false
+		}
+		if b[i] == '\n' {
+			buf.Write(b[p:i])
+			*newLine = true
 			p = i + 1
 		}
 	}
@@ -221,7 +225,7 @@ func (self *ByteLogger) MakeRecord(node string, b []byte, last *RemainBuffer) er
 	// FileLogger do not left the buffer that has not been emited
 	var err error
 	if serverConfig.Console.LogTimestamp {
-		b, err = self.insertStamp(b)
+		b, err = self.insertStamp(b, &last.NewLine)
 		if err != nil {
 			plog.ErrorNode(node, err)
 			return err
