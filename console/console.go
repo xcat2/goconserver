@@ -124,9 +124,9 @@ func (self *Console) writeClient(conn net.Conn) {
 	var bufChan chan []byte
 	var ok bool
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s\r\n",
+	welcome := fmt.Sprintf("goconserver(%s): Hello %s, welcome to the session of %s",
 		time.Now().Format("2006-01-02 15:04:05"), conn.RemoteAddr().String(), self.node.StorageNode.Name)
-	err := common.Network.SendByteWithLengthTimeout(conn, []byte(welcome), clientTimeout)
+	err := common.Network.SendByteWithLengthTimeout(conn, []byte(welcome+"\r\n"), clientTimeout)
 	if err != nil {
 		plog.InfoNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to client. Error:%s", err.Error()))
 		return

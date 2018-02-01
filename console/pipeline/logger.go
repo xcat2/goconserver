@@ -61,6 +61,16 @@ func (self *LineLogger) Register(publisher Publisher) {
 	self.publishers = append(self.publishers, publisher)
 }
 
+func (self *LineLogger) getEndPos(b []byte, start, end int) int {
+	for end > start {
+		if b[end-1] != '\r' {
+			break
+		}
+		end--
+	}
+	return end
+}
+
 func (self *LineLogger) MakeRecord(node string, b []byte, last *RemainBuffer) error {
 	var err error
 	var buf []byte
@@ -70,7 +80,8 @@ func (self *LineLogger) MakeRecord(node string, b []byte, last *RemainBuffer) er
 	}
 	for i := 0; i < len(b); i++ {
 		if b[i] == '\n' {
-			lineBuf := NewLineBuf(CONSOLE_TYPE, string(b[p:i]), node, serverConfig.Console.LogTimestamp)
+			end := self.getEndPos(b, p, i)
+			lineBuf := NewLineBuf(CONSOLE_TYPE, string(b[p:end]), node, serverConfig.Console.LogTimestamp)
 			p = i + 1
 			buf, err = lineBuf.Marshal()
 			if err != nil {
