@@ -206,7 +206,7 @@ func (self *ByteLogger) insertStamp(b []byte, newLine *bool) ([]byte, error) {
 	}()
 	for i := 0; i < len(b); i++ {
 		if *newLine {
-			buf.WriteString("\n[" + time.Now().Format("2006-01-02 15:04:05") + "] ")
+			buf.WriteString("\n[" + time.Now().Format(common.RFC8601_SECOND) + "] ")
 			*newLine = false
 		}
 		if b[i] == '\n' {
@@ -265,7 +265,7 @@ func (self *ByteLogger) Prompt(node string, message string) error {
 		message = message + "\r\n"
 	}
 	if serverConfig.Console.LogTimestamp {
-		message = "\r\n[" + time.Now().Format("2006-01-02 15:04:05") + "] " + message
+		message = "\r\n[" + time.Now().Format(common.RFC8601_SECOND) + "] " + message
 	}
 	for _, publisher := range self.publishers {
 		err = publisher.Publish(node, []byte(message))
