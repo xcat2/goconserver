@@ -11,10 +11,10 @@ import (
 const (
 	PERIODIC_INTERVAL      = time.Minute
 	PIPELINE_SEND_INTERVAL = 300 * time.Millisecond
-	RFC8601_SECOND         = "2006-01-02T15:04:05Z0700"
-	RFC8601_MILLISECOND    = "2006-01-02T15:04:05Z0700.000"
-	RFC8601_MICROSECOND    = "2006-01-02T15:04:05Z0700.000000"
-	RFC8601_NANOSECOND     = "2006-01-02T15:04:05Z0700.000000000"
+	RFC3339_SECOND         = time.RFC3339
+	RFC3339_MILLISECOND    = "2006-01-02T15:04:05.000Z07:00"
+	RFC3339_MICROSECOND    = "2006-01-02T15:04:05.000000Z07:00"
+	RFC3339_NANOSECOND     = "2006-01-02T15:04:05.000000000Z07:00"
 	CLIENT_CONGO_TYPE      = iota
 	CLIENT_XCAT_TYPE
 )
@@ -49,10 +49,10 @@ var (
 		"y":    true,
 	}
 	PRECISION_FORMAT = map[string]string{
-		"second":      RFC8601_SECOND,
-		"millisecond": RFC8601_MILLISECOND,
-		"microsecond": RFC8601_MICROSECOND,
-		"nanosecond":  RFC8601_NANOSECOND}
+		"second":      RFC3339_SECOND,
+		"millisecond": RFC3339_MILLISECOND,
+		"microsecond": RFC3339_MICROSECOND,
+		"nanosecond":  RFC3339_NANOSECOND}
 )
 
 type FileCfg struct {
@@ -132,7 +132,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
 	serverConfig.Console.LogTimestamp = true
 	serverConfig.Console.TimePrecision = "microsecond"
-	serverConfig.Console.TimeFormat = RFC8601_MICROSECOND
+	serverConfig.Console.TimeFormat = RFC3339_MICROSECOND
 	serverConfig.Console.ReplayLines = 30
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
