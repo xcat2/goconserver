@@ -16,7 +16,7 @@ endif
 ifeq ($(PLATFORM), Linux)
 	PLATFORM=linux
 endif
-VERSION=0.2
+VERSION=0.2.1
 BUILD_TIME=`date +%FT%T%z`
 LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.Commit=${COMMIT}"
 
