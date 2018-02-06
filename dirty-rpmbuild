@@ -82,7 +82,7 @@ esac
 cat <<EOF >"${GOCONSERVER_SPEC}"
 Summary: Independent tool to provide terminal session service.
 Name: goconserver
-Version: 0.2.1
+Version: ${VERSION:-0.0.1}
 Release: snap$(date '+%Y%m%d%H%M')
 License: EPL
 Group: Applications/System
