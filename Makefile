@@ -1,3 +1,7 @@
+GOPATH?=$(shell pwd)
+export GOPATH
+PATH+=:$(shell pwd)/bin
+export PATH
 GITHUB_DIR=${GOPATH}/src/github.com/chenglch/
 REPO_DIR=${GOPATH}/src/github.com/chenglch/goconserver
 CURRENT_DIR=$(shell pwd)
@@ -70,9 +74,16 @@ tar: build
 	cd - ;\
 	tar cvfz build/goconserver_${PLATFORM}_${ARCH}.tar.gz -C build goconserver_${PLATFORM}_${ARCH}
 
+deb: tar
+	cd build && VERSION=${VERSION} ../dirty-debuild goconserver_${PLATFORM}_${ARCH}.tar.gz
+
+rpm: tar
+	cd build && VERSION=${VERSION} ../dirty-rpmbuild goconserver_${PLATFORM}_${ARCH}.tar.gz
+
 clean:
 	rm -f ${SERVER_BINARY}
 	rm -f ${CLIENT_BINARY}
 	rm -rf build
+	rm -rf bin pkg
 
-.PHONY: binary deps fmt build clean link tar
+.PHONY: binary deps fmt build clean link tar deb rpm
