@@ -76,29 +76,37 @@ case "${ARCH}" in
 	;;
 esac
 
-cat <<-EOF >description-pak
-Independent tool to provide terminal session service.
-goconserver is written in golang and is a part of microservice of xcat3. It
-can work as a independent tool to provide the terminal session service.
-Terminal session could run in the background and help logging the terminal
-content.
+GOCONSERVER_PREP_TARBALL="goconserver.tar.gz"
+EXTRACT_DIR="goconserver-${VERSION:-0.0.1}"
+rm -rf "${EXTRACT_DIR}.orig" "${EXTRACT_DIR}"
+
+ln -s -f "${GOCONSERVER_REPACK_TARBALL}" "${GOCONSERVER_PREP_TARBALL}"
+
+alien -d -g -c -k --version=${VERSION:-0.0.1} "${GOCONSERVER_PREP_TARBALL}"
+rm -f "${GOCONSERVER_PREP_TARBALL}"
+
+sed -i -e 's/^Copyright: .*$/Copyright: EPL/' \
+	"${EXTRACT_DIR}/debian/copyright"
+sed -i -e 's/^Architecture: .*$/Architecture: ppc64el/' \
+	-e 's/^Maintainer: .*$/Maintainer: GONG Jie <gongjie@linux.vnet.ibm.com>/' \
+	-e '/^Description:/,$d' \
+	"${EXTRACT_DIR}/debian/control"
+cat <<-EOF >>"${EXTRACT_DIR}/debian/control"
+Description: Independent tool to provide terminal session service.
+ goconserver is written in golang and is a part of microservice of xcat3. It
+ can work as a independent tool to provide the terminal session service.
+ Terminal session could run in the background and help logging the terminal
+ content.
 EOF
 
-# Make sure goconserver is not installed
-dpkg -P goconserver
+cat <<-EOF >"${EXTRACT_DIR}/debian/changelog"
+goconserver (${VERSION:-0.0.1}-snap$(date '+%Y%m%d%H%M')) experimental; urgency=low
 
-type checkinstall >/dev/null 2>&1
-exit_if_bad "$?" "Command not found - checkinstall"
+  * Converted from .tgz format to .deb by alien version 8.95
 
-checkinstall --arch "${ARCH}" -D -y \
-	--pkgname goconserver \
-	--pkglicense EPL \
-	--pkgversion ${VERSION:-0.0.1} \
-	--pkgrelease "snap$(date '+%Y%m%d%H%M')" \
-	--maintainer "gongjie@linux.vnet.ibm.com" \
-	--requires libc6 \
-	tar -x -C / -f "${GOCONSERVER_REPACK_TARBALL}"
-exit_if_bad "$?" "build package failed."
 
-rm -f description-pak
-dpkg -P goconserver
+
+ -- GONG Jie <gongjie@linux.vnet.ibm.com>  $(date -R)
+EOF
+
+( cd "${EXTRACT_DIR}" && debian/rules binary )
