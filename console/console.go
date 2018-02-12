@@ -3,9 +3,9 @@ package console
 import (
 	"bytes"
 	"fmt"
-	"github.com/chenglch/goconserver/common"
-	pl "github.com/chenglch/goconserver/console/pipeline"
-	"github.com/chenglch/goconserver/plugins"
+	"github.com/xcat2/goconserver/common"
+	pl "github.com/xcat2/goconserver/console/pipeline"
+	"github.com/xcat2/goconserver/plugins"
 	"io"
 	"net"
 	"sync"

@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"sync"
 )
 

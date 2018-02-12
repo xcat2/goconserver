@@ -55,7 +55,7 @@ then
 	echo
 	echo "Examples:"
 	echo "  ${0##*/} goconserver_linux_ppc64le.tar.gz"
-	echo "  ${0##*/} https://github.com/chenglch/goconserver/files/1505167/goconserver_linux_ppc64le.tar.gz"
+	echo "  ${0##*/} https://github.com/xcat2/goconserver/files/1505167/goconserver_linux_ppc64le.tar.gz"
 	exit 0
 fi
 
@@ -87,7 +87,7 @@ Release: snap$(date '+%Y%m%d%H%M')
 License: EPL
 Group: Applications/System
 BuildArch: ${ARCH}
-URL: https://github.com/chenglch/goconserver/
+URL: https://github.com/xcat2/goconserver/
 Vendor: IBM Corp.
 Packager: IBM Corp.
 Distribution: %{?_distribution:%{_distribution}}%{!?_distribution:%{_vendor}}

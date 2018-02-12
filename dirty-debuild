@@ -55,7 +55,7 @@ then
 	echo
 	echo "Examples:"
 	echo "  ${0##*/} goconserver_linux_ppc64le.tar.gz"
-	echo "  ${0##*/} https://github.com/chenglch/goconserver/files/1505167/goconserver_linux_ppc64le.tar.gz"
+	echo "  ${0##*/} https://github.com/xcat2/goconserver/files/1505167/goconserver_linux_ppc64le.tar.gz"
 	exit 0
 fi
 

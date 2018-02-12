@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"github.com/coreos/etcd/clientv3"
 	"os"
 	"reflect"

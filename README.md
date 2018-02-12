@@ -49,7 +49,7 @@ api interface.
 
 ### Setup goconserver from binary
 Download the binary tarball for release from
-[goconserver](https://github.com/chenglch/goconserver/releases)
+[goconserver](https://github.com/xcat2/goconserver/releases)
 ```
 tar xvfz goconserver_linux_amd64.tar.gz
 cd goconserver_linux_amd64
@@ -88,7 +88,7 @@ Please setup golang SDK(1.9 or higher), GOPATH environment variable and
 ### Build and install
 
 ```
-git clone https://github.com/chenglch/goconserver.git
+git clone https://github.com/xcat2/goconserver.git
 cd goconserver
 make deps
 make install

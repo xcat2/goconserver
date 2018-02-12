@@ -2,7 +2,7 @@ package console
 
 import (
 	"fmt"
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"os"
 )
 

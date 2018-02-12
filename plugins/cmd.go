@@ -2,7 +2,7 @@ package plugins
 
 import (
 	"fmt"
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"github.com/kr/pty"
 	"os"
 	"os/exec"

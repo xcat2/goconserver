@@ -2,8 +2,8 @@ GOPATH?=$(shell pwd)
 export GOPATH
 PATH+=:$(shell pwd)/bin
 export PATH
-GITHUB_DIR=${GOPATH}/src/github.com/chenglch/
-REPO_DIR=${GOPATH}/src/github.com/chenglch/goconserver
+GITHUB_DIR=${GOPATH}/src/github.com/xcat2/
+REPO_DIR=${GOPATH}/src/github.com/xcat2/goconserver
 CURRENT_DIR=$(shell pwd)
 REPO_DIR_LINK=$(shell readlink -f ${REPO_DIR})
 SERVER_CONF_FILE=/etc/goconserver/server.conf
@@ -27,7 +27,7 @@ LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X 
 all: build
 deps:
 	go get github.com/Masterminds/glide
-	glide install
+	${GOPATH}/bin/glide install
 
 link:
 	REPO_DIR=${REPO_DIR}; \

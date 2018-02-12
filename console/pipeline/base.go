@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"time"
 )
 
@@ -14,7 +14,7 @@ const (
 var (
 	PUBLISHER_INIT_MAP = map[string]func(interface{}) (Publisher, error){}
 	LOGGER_INIT_MAP    = map[string]func() Logger{}
-	plog               = common.GetLogger("github.com/chenglch/goconserver/console/logger")
+	plog               = common.GetLogger("github.com/xcat2/goconserver/console/logger")
 	serverConfig       = common.GetServerConfig()
 )
 

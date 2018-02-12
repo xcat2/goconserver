@@ -3,8 +3,8 @@ package console
 import (
 	"context"
 	"fmt"
-	"github.com/chenglch/goconserver/common"
-	pb "github.com/chenglch/goconserver/console/consolepb"
+	"github.com/xcat2/goconserver/common"
+	pb "github.com/xcat2/goconserver/console/consolepb"
 	google_protobuf "github.com/golang/protobuf/ptypes/empty"
 	net_context "golang.org/x/net/context"
 	"google.golang.org/grpc"
