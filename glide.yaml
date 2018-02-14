@@ -1,6 +1,6 @@
 package: .
 import:
-- package: github.com/chenglch/goconserver
+- package: github.com/xcat2/goconserver
   subpackages:
   - api
   - common

@@ -1,6 +1,6 @@
 [Unit]
 Description=goconserver console daemon
-Documentation=https://github.com/chenglch/goconserver
+Documentation=https://github.com/xcat2/goconserver
 
 [Service]
 LimitNOFILE=65535

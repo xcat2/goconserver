@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/chenglch/goconserver/console"
+	"github.com/xcat2/goconserver/console"
 	"github.com/spf13/cobra"
 )
 

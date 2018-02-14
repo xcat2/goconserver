@@ -2,14 +2,14 @@ package plugins
 
 import (
 	"fmt"
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"io"
 )
 
 var (
 	DRIVER_INIT_MAP     = map[string]func(string, map[string]string) (ConsolePlugin, error){}
 	DRIVER_VALIDATE_MAP = map[string]func(string, map[string]string) error{}
-	plog                = common.GetLogger("github.com/chenglch/goconserver/plugins")
+	plog                = common.GetLogger("github.com/xcat2/goconserver/plugins")
 )
 
 type ConsoleSession interface {

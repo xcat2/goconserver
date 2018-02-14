@@ -7,7 +7,7 @@ POST /nodes
     "name": "node2",
     "driver": "ssh",
     "params": {
-        "user": "chenglch",
+        "user": "xcat2",
         "host": "10.0.0.2",
         "port": "22",
         "private_key": "~/.ssh/id_rsa"

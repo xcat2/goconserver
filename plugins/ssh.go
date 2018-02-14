@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"golang.org/x/crypto/ssh"
 	"net"
 	"os"

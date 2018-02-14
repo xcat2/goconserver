@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/chenglch/goconserver/common"
+	"github.com/xcat2/goconserver/common"
 	"strings"
 	"time"
 )

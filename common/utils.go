@@ -36,7 +36,7 @@ const (
 )
 
 var (
-	plog = GetLogger("github.com/chenglch/goconserver/common")
+	plog = GetLogger("github.com/xcat2/goconserver/common")
 )
 
 func init() {

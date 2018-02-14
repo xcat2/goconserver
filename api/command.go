@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"encoding/json"
-	"github.com/chenglch/goconserver/console"
+	"github.com/xcat2/goconserver/console"
 	"github.com/gorilla/mux"
 )
 

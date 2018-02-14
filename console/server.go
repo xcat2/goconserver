@@ -4,11 +4,11 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/chenglch/goconserver/common"
-	pb "github.com/chenglch/goconserver/console/consolepb"
-	pl "github.com/chenglch/goconserver/console/pipeline"
-	"github.com/chenglch/goconserver/plugins"
-	"github.com/chenglch/goconserver/storage"
+	"github.com/xcat2/goconserver/common"
+	pb "github.com/xcat2/goconserver/console/consolepb"
+	pl "github.com/xcat2/goconserver/console/pipeline"
+	"github.com/xcat2/goconserver/plugins"
+	"github.com/xcat2/goconserver/storage"
 	"net"
 	"net/http"
 	"os"
@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	plog         = common.GetLogger("github.com/chenglch/goconserver/console")
+	plog         = common.GetLogger("github.com/xcat2/goconserver/console")
 	nodeManager  *NodeManager
 	serverConfig = common.GetServerConfig()
 	STATUS_MAP   = map[int]string{
