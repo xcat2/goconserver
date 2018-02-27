@@ -87,7 +87,7 @@ rm -f "${GOCONSERVER_PREP_TARBALL}"
 
 sed -i -e 's/^Copyright: .*$/Copyright: EPL/' \
 	"${EXTRACT_DIR}/debian/copyright"
-sed -i -e 's/^Architecture: .*$/Architecture: ppc64el/' \
+sed -i -e 's/^Architecture: .*$/Architecture: '"${ARCH}"'/' \
 	-e 's/^Maintainer: .*$/Maintainer: GONG Jie <gongjie@linux.vnet.ibm.com>/' \
 	-e '/^Description:/,$d' \
 	"${EXTRACT_DIR}/debian/control"
