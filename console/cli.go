@@ -2,8 +2,8 @@ package console
 
 import (
 	"fmt"
-	"github.com/xcat2/goconserver/common"
 	"github.com/spf13/cobra"
+	"github.com/xcat2/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"runtime"

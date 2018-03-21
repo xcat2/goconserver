@@ -2,8 +2,8 @@ package plugins
 
 import (
 	"fmt"
-	"github.com/xcat2/goconserver/common"
 	"github.com/kr/pty"
+	"github.com/xcat2/goconserver/common"
 	"os"
 	"os/exec"
 	"strings"
@@ -78,5 +78,9 @@ func (self *CommondConsole) Close() error {
 }
 
 func (self *CommondConsole) Wait() error {
-	return self.command.Wait()
+	err := self.command.Wait()
+	if err == nil || strings.Contains(err.Error(), "killed") {
+		return nil
+	}
+	return err
 }

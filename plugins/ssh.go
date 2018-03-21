@@ -222,7 +222,13 @@ func (self *SSHConsole) Close() error {
 
 func (self *SSHConsole) Wait() error {
 	if self.session != nil {
-		return self.session.Wait()
+		err := self.session.Wait()
+		switch err.(type) {
+		case *ssh.ExitMissingError:
+			return nil
+		default:
+			return err
+		}
 	}
 	return nil
 }
