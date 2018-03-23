@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"encoding/json"
-	"github.com/xcat2/goconserver/console"
 	"github.com/gorilla/mux"
+	"github.com/xcat2/goconserver/console"
 )
 
 type CommandApi struct {

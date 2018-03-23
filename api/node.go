@@ -6,10 +6,10 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/xcat2/goconserver/common"
 	"github.com/xcat2/goconserver/console"
 	"github.com/xcat2/goconserver/storage"
-	"github.com/gorilla/mux"
 )
 
 var (

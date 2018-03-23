@@ -3,9 +3,9 @@ package console
 import (
 	"context"
 	"fmt"
+	google_protobuf "github.com/golang/protobuf/ptypes/empty"
 	"github.com/xcat2/goconserver/common"
 	pb "github.com/xcat2/goconserver/console/consolepb"
-	google_protobuf "github.com/golang/protobuf/ptypes/empty"
 	net_context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
