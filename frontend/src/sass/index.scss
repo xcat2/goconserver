@@ -1,0 +1,94 @@
+@import "~xterm/src/xterm.css";
+
+html, body {
+    height: 100%;
+    min-height: 100%;
+    margin: 0;
+    overflow: hidden;
+    color: #373a3c;
+}
+
+#wrap {
+    background: #fff none repeat scroll 0 0;
+}
+#banner {
+    width: 100%;
+    height: 76px;
+    box-shadow: 0 1px 5px 0 rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #919191;
+}
+
+.container {
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    background: #fff none repeat scroll 0 0;
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    table-layout: fixed;
+    display: table;
+    width: 90%;
+    height: 1180px;
+}
+
+.container h3 {
+    border-bottom: 1px solid #919191;
+    color: #014c8c;
+    display: block;
+}
+
+#banner h1 {
+    text-align: center;
+    color: #014c8c;
+}
+
+#left {
+    float: left;
+    padding: 15px 10px 15px 20px;
+    width: 20%;
+    display:block;
+    margin: 0 auto;
+    max-width: 1180px;
+    border-right: 1px solid #919191;
+    height: 100%;
+}
+
+#left table {
+    text-align: center;
+    padding: 2px;
+}
+
+#right ul {
+  text-align: left;
+  padding: 3px 2px 2px 3px;
+  list-style: none;
+}
+
+#right ul li {
+    padding: 1px;
+}
+
+#middle {
+    padding: 15px 10px 15px 20px;
+    width: 60%;
+    float: left;
+    display: block;
+    margin: 0 auto;
+    height: 100%;
+}
+
+#term-box {
+    background: #3333338a;
+    height: 60%;
+}
+
+#right {
+    padding: 15px 20px 15px 20px;
+    width: 10%;
+    float: left;
+    margin: 0 auto;
+    display:block;
+    border-left: 1px solid #919191;
+    height: 100%;
+}

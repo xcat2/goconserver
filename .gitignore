@@ -15,3 +15,5 @@ vendor/
 goconserver
 congo
 build
+frontend/package-lock.json
+frontend/node_modules

@@ -9,6 +9,8 @@ const (
 	STORAGE_NOT_EXIST
 	TASK_NOT_EXIST
 
+	NULL_OBJECT
+
 	INVALID_PARAMETER
 	LOCKED
 	CONNECTION_ERROR
@@ -34,6 +36,7 @@ var (
 	ErrCommandNotExist = NewErr(COMMAND_NOT_EXIST, "Command not exist")
 	ErrStorageNotExist = NewErr(STORAGE_NOT_EXIST, "Storage not exist")
 	ErrTaskNotExist    = NewErr(TASK_NOT_EXIST, "Task not exist")
+	ErrNullObject      = NewErr(NULL_OBJECT, "Null object")
 
 	ErrInvalidParameter = NewErr(INVALID_PARAMETER, "Invalid parameter")
 	ErrLocked           = NewErr(LOCKED, "Locked")

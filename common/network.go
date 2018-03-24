@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"golang.org/x/net/websocket"
 	"io"
 	"io/ioutil"
 	"net"
@@ -123,6 +125,12 @@ func (self *network) ResetWriteTimeout(conn net.Conn) error {
 
 func (self *network) SendBytes(conn net.Conn, b []byte) error {
 	n := 0
+	// TODO(chenglch): A workaround to solve 1006 error from websocket at
+	// frontend side due to UTF8 encoding problem.
+	if _, ok := conn.(*websocket.Conn); ok {
+		s := base64.StdEncoding.EncodeToString(b)
+		b = []byte(s)
+	}
 	for n < len(b) {
 		tmp, err := conn.Write(b[n:])
 		if err != nil {
