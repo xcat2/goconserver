@@ -913,12 +913,12 @@ func (self *NodeManager) Replay(name string) (string, int, string) {
 	return content, http.StatusOK, ""
 }
 
-func (self *NodeManager) ListUser(name string) (map[string][]string, int, string) {
+func (self *NodeManager) ListUser(name string) (ret map[string][]string, code int, msg string) {
 	var node *Node
 	var users []string
 	var err error
 	var ok bool
-	ret := make(map[string][]string)
+	ret = make(map[string][]string)
 	if !self.stor.SupportWatcher() {
 		self.RWlock.RLock()
 		if node, ok = self.Nodes[name]; !ok {
@@ -926,6 +926,13 @@ func (self *NodeManager) ListUser(name string) (map[string][]string, int, string
 			return nil, http.StatusBadRequest, fmt.Sprintf("The node %s is not exist.", name)
 		}
 		self.RWlock.RUnlock()
+		defer func() {
+			if r := recover(); r != nil {
+				ret["users"] = make([]string, 0)
+				code = http.StatusOK
+				msg = ""
+			}
+		}()
 		users = node.console.ListSessionUser()
 	} else {
 		nodeWithHost := self.stor.ListNodeWithHost()

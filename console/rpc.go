@@ -70,8 +70,9 @@ func (self *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode 
 	return &pb.ReplayContent{Content: content}, nil
 }
 
-func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.SessionUsers, error) {
+func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (pbUsers *pb.SessionUsers, err error) {
 	plog.Debug("Receive the RPC call ListSessionUser")
+	pbUsers = new(pb.SessionUsers)
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
 		nodeManager.RWlock.RUnlock()
@@ -79,9 +80,16 @@ func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *
 		return nil, common.ErrNodeNotExist
 	}
 	node := nodeManager.Nodes[rpcNode.Name]
+	defer func() {
+		if r := recover(); r != nil {
+			pbUsers.Users = make([]string, 0)
+			err = nil
+		}
+	}()
 	users := node.console.ListSessionUser()
 	nodeManager.RWlock.RUnlock()
-	return &pb.SessionUsers{Users: users}, nil
+	pbUsers.Users = users
+	return pbUsers, nil
 }
 
 func (self *ConsoleRPCServer) ListNodesStatus(ctx net_context.Context, empty *google_protobuf.Empty) (*pb.NodesStatus, error) {
