@@ -5,6 +5,7 @@ export PATH
 GITHUB_DIR=${GOPATH}/src/github.com/xcat2/
 REPO_DIR=${GOPATH}/src/github.com/xcat2/goconserver
 CURRENT_DIR=$(shell pwd)
+FRONTEND_DIR=${CURRENT_DIR}/frontend
 REPO_DIR_LINK=$(shell readlink -f ${REPO_DIR})
 SERVER_CONF_FILE=/etc/goconserver/server.conf
 CLIENT_CONF_FILE=~/congo.sh
@@ -20,7 +21,7 @@ endif
 ifeq ($(PLATFORM), Linux)
 	PLATFORM=linux
 endif
-VERSION=0.2.2
+VERSION=0.3.0
 BUILD_TIME=`date +%FT%T%z`
 LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.Commit=${COMMIT}"
 
@@ -48,6 +49,12 @@ build: link
 	cd ${REPO_DIR}; \
 	go build ${LDFLAGS} -o ${SERVER_BINARY} goconserver.go; \
 	go build ${LDFLAGS} -o ${CLIENT_BINARY} cmd/congo.go; \
+	cd -
+
+frontend:
+	cd ${FRONTEND_DIR}; \
+	npm install --unsafe-perm --save-dev; \
+	gulp build; \
 	cd -
 
 install: build
@@ -86,4 +93,4 @@ clean:
 	rm -rf build
 	rm -rf bin pkg
 
-.PHONY: binary deps fmt build clean link tar deb rpm
+.PHONY: binary deps fmt frontend build clean link tar deb rpm

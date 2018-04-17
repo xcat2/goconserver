@@ -54,7 +54,7 @@ func (self *Console) Accept(conn net.Conn) {
 	self.bufConn[conn] = make(chan []byte)
 	self.mutex.Unlock()
 	go self.writeTarget(conn)
-	go self.writeClient(conn)
+	self.writeClient(conn)
 }
 
 // Disconnect from client

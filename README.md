@@ -37,45 +37,47 @@ api interface.
 - file: Store the host information in a json file.
 - etcd: Support goconserver cluster [experimental].
 
-### Design Structure
-`goconserver` can be divided into two parts:
-- daemon part: `goconserver`, expose rest api interface to define and control
-  the session node.
+### Multiple client types
 
-- client part: `congo`, a command line tool to define session or connect to the
-  session. Multiple client sessions could be shared.
+- terminal: Get console session via TCP(or with TLS) connection.
+- web: Get console session from web terminal.
+
+![preview](/goconserver2.gif)
+
+### Design Structure
+`goconserver` can be divided into three parts:
+- daemon part: `goconserver`, expose REST api interface to define and control
+  the session host.
+
+- client part: `congo`, a command line tool to manage the configuration of
+  session hosts. A tty console client is also provided and multiple clients
+  could share the same session.
+
+- frontend part: A web page is provided to list the session status and expose
+  a web terminal for the selected node. The tty client from `congo` can share
+  the same session from web browser.
 
 ## Setup goconserver from release
 
-### Setup goconserver from binary
-Download the binary tarball for release from
+### Setup
+Download binary or RPM tarball from
 [goconserver](https://github.com/xcat2/goconserver/releases)
 ```
-tar xvfz goconserver_linux_amd64.tar.gz
-cd goconserver_linux_amd64
-./setup.sh
+yum install <goconserver.rpm>
+systemctl start goconserver.service
 ```
 
-Modify the congiguration file `/etc/goconserver/server.conf` based on your
-environment, then run `goconserver` to start the daemon service. To support a
-large amount of sessions, please use `ulimit -n <number>` command to set the
-number of open files.
-```
-goconserver [--congi-file <file>]
-```
+### Configuration
+For the server side, modify the congiguration file
+`/etc/goconserver/server.conf` based on your environment, then restart
+goconserver service.
 
-Modify the the environment variables in `/etc/profile.d/congo.sh` based on your
-environment, then try the `congo` command.
+For client, modify the the environment variables in `/etc/profile.d/congo.sh`
+based on your environment, then try the `congo` command. For example:
+
 ```
 source /etc/profile.d/congo.sh
 congo list
-```
-### Setup goconserver from rpm or deb
-
-```
-tar xvfz <tarball for rpm or deb>
-yum install <rpm>
-dpkg -i <deb>
 ```
 
 ## Development
@@ -94,9 +96,28 @@ make deps
 make install
 ```
 
-### Setup SSL (optional)
+### Setup SSL/TLS (optional)
 
 Please refer to [ssl](/scripts/ssl/)
+
+### Web Interface (ongoing)
+
+Setup nodejs(9.0+) and npm(5.6.0+) toolkit at first. An example steps could be
+found at [node env](/frontend/). Then follow the steps below:
+
+```
+npm install -g gulp webpack webpack-cli
+make frontend
+```
+
+The frontend content is generated at `build/dist` directory. To enable it,
+modify the configuration in `/etc/gconserver/server.conf` like below, then
+restart `goconserver` service. The web url is available on
+`http(s)://<ip or domain name>:<api-port>/`.
+```
+api:
+  dist_dir : "<dist directory>"
+```
 
 ## Command Example
 

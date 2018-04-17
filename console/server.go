@@ -9,6 +9,7 @@ import (
 	pl "github.com/xcat2/goconserver/console/pipeline"
 	"github.com/xcat2/goconserver/plugins"
 	"github.com/xcat2/goconserver/storage"
+	"golang.org/x/net/websocket"
 	"net"
 	"net/http"
 	"os"
@@ -32,10 +33,11 @@ const (
 )
 
 var (
-	plog         = common.GetLogger("github.com/xcat2/goconserver/console")
-	nodeManager  *NodeManager
-	serverConfig = common.GetServerConfig()
-	STATUS_MAP   = map[int]string{
+	plog          = common.GetLogger("github.com/xcat2/goconserver/console")
+	nodeManager   *NodeManager
+	consoleServer *ConsoleServer
+	serverConfig  = common.GetServerConfig()
+	STATUS_MAP    = map[int]string{
 		STATUS_AVAIABLE:  "avaiable",
 		STATUS_ENROLL:    "enroll",
 		STATUS_CONNECTED: "connected",
@@ -124,6 +126,8 @@ func (self *Node) restartMonitor() {
 				plog.DebugNode(self.StorageNode.Name, "Exit reconnect goroutine")
 				return
 			}
+			// before start console, both request from client and reconnecting monitor try to get the lock at first
+			// so that only one startConsole goroutine is running for the node.
 			if err = self.RequireLock(false); err != nil {
 				plog.ErrorNode(self.StorageNode.Name, err.Error())
 				break
@@ -274,6 +278,14 @@ func NewConsoleServer(host string, port string) *ConsoleServer {
 	return &ConsoleServer{host: host, port: port}
 }
 
+func AcceptWesocketClient(ws *websocket.Conn) error {
+	if consoleServer == nil {
+		return common.ErrNullObject
+	}
+	consoleServer.handle(ws)
+	return nil
+}
+
 func (self *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
 	var node, command string
 	var ok bool
@@ -364,6 +376,7 @@ func (self *ConsoleServer) handle(conn interface{}) {
 	nodeManager.RWlock.RUnlock()
 	if command == COMMAND_START_CONSOLE {
 		if node.status != STATUS_CONNECTED {
+			// NOTE(chenglch): Get the lock at first, then allow to connect to the console target.
 			if err = node.RequireLock(false); err != nil {
 				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
 				err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
@@ -376,6 +389,8 @@ func (self *ConsoleServer) handle(conn interface{}) {
 			if node.status == STATUS_CONNECTED {
 				node.Release(false)
 			} else {
+				// NOTE(chenglch): Already got the lock, but the console connection is not established, start
+				// console at the backend.
 				go node.startConsole()
 				if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
 					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
@@ -482,7 +497,7 @@ func GetNodeManager() *NodeManager {
 		nodeManager.hostname = hostname
 		nodeManager.Nodes = make(map[string]*Node)
 		nodeManager.RWlock = new(sync.RWMutex)
-		consoleServer := NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
+		consoleServer = NewConsoleServer(serverConfig.Global.Host, serverConfig.Console.Port)
 		stor, err := storage.NewStorage(serverConfig.Global.StorageType)
 		if err != nil {
 			panic(err)

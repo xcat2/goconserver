@@ -78,6 +78,9 @@ func main() {
 	api.Router = mux.NewRouter().StrictSlash(true)
 	api.NewNodeApi(api.Router)
 	api.NewCommandApi(api.Router)
+	if serverConfig.API.DistDir != "" {
+		api.RegisterBackendHandler(api.Router)
+	}
 	httpServer := &http.Server{
 		ReadTimeout:  time.Duration(serverConfig.API.HttpTimeout) * time.Second,
 		WriteTimeout: time.Duration(serverConfig.API.HttpTimeout) * time.Second,

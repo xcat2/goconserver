@@ -98,6 +98,7 @@ type ServerConfig struct {
 	API struct {
 		Port        string `yaml:"port"`
 		HttpTimeout int    `yaml:"http_timeout"`
+		DistDir     string `yaml:"dist_dir"`
 	}
 	Console struct {
 		Port              string    `yaml:"port"`
@@ -128,6 +129,7 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Global.StorageType = "file"
 	serverConfig.API.Port = "12429"
 	serverConfig.API.HttpTimeout = 10
+	serverConfig.API.DistDir = ""
 	serverConfig.Console.Port = "12430"
 	serverConfig.Console.DataDir = "/var/lib/goconserver/"
 	serverConfig.Console.LogTimestamp = true
