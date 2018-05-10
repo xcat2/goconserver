@@ -84,6 +84,20 @@ type LoggerCfg struct {
 	UDP  []UDPCfg  `yaml:"udp"`
 }
 
+type EtcdCfg struct {
+	DailTimeout      int    `yaml:"dail_timeout"`
+	RequestTimeout   int    `yaml:"request_timeout"`
+	Endpoints        string `yaml:"endpoints"`
+	ServiceHeartbeat int64  `yaml:"service_heartbeat"`
+	Prefix           string `yaml: prefix`
+	SSLKeyFile       string `yaml:"ssl_key_file"`
+	SSLCertFile      string `yaml:"ssl_cert_file"`
+	SSLCACertFile    string `yaml:"ssl_ca_cert_file"`
+	// vhost is the name registered in etcd service, by default it is the hostname
+	Vhost   string `yaml:"vhost`
+	RpcPort string `yaml:"rpcport"`
+}
+
 type ServerConfig struct {
 	Global struct {
 		Host          string `yaml:"host"`
@@ -110,15 +124,9 @@ type ServerConfig struct {
 		ClientTimeout     int       `yaml:"client_timeout"`
 		TargetTimeout     int       `yaml:"target_timeout"`
 		ReconnectInterval int       `yaml:"reconnect_interval"`
-		RPCPort           string    `yaml:"rpcport"`
 		Loggers           LoggerCfg `yaml:"logger"`
 	}
-	Etcd struct {
-		DailTimeout     int    `yaml:"dail_timeout"`
-		RequestTimeout  int    `yaml:"request_timeout"`
-		Endpoints       string `yaml:"endpoints"`
-		ServerHeartbeat int64  `yaml:"server_heartbeat"`
-	}
+	Etcd EtcdCfg `yaml:"etcd"`
 }
 
 func InitServerConfig(confFile string) (*ServerConfig, error) {
@@ -139,12 +147,13 @@ func InitServerConfig(confFile string) (*ServerConfig, error) {
 	serverConfig.Console.ClientTimeout = 30
 	serverConfig.Console.TargetTimeout = 30
 	serverConfig.Console.ReconnectInterval = 5
-	serverConfig.Console.RPCPort = "12431" // only for async storage type
+	serverConfig.Etcd.RpcPort = "12431" // only for async storage type
 
 	serverConfig.Etcd.DailTimeout = 5
 	serverConfig.Etcd.RequestTimeout = 2
 	serverConfig.Etcd.Endpoints = "127.0.0.1:2379"
-	serverConfig.Etcd.ServerHeartbeat = 5
+	serverConfig.Etcd.ServiceHeartbeat = 30
+	serverConfig.Etcd.Prefix = "goconserver"
 	data, err := ioutil.ReadFile(confFile)
 	if err != nil {
 		return serverConfig, nil

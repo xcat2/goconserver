@@ -93,7 +93,11 @@ func (api *NodeApi) put(w http.ResponseWriter, req *http.Request) {
 	nodes := make([]string, 0, 1)
 	nodes = append(nodes, vars["node"])
 	plog.InfoNode(vars["node"], fmt.Sprintf("The console state has been changed to %s.", state))
-	result := nodeManager.SetConsoleState(nodes, state)
+	result, err := nodeManager.SetConsoleState(nodes, state)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
+		return
+	}
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
 		return
@@ -131,7 +135,11 @@ func (api *NodeApi) bulkPut(w http.ResponseWriter, req *http.Request) {
 	for _, v := range storNodes["nodes"] {
 		nodes = append(nodes, v.Name)
 	}
-	result := nodeManager.SetConsoleState(nodes, state)
+	result, err := nodeManager.SetConsoleState(nodes, state)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
@@ -191,7 +199,11 @@ func (api *NodeApi) bulkPost(w http.ResponseWriter, req *http.Request) {
 		plog.HandleHttp(w, req, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	result := nodeManager.PostNodes(nodes)
+	result, err := nodeManager.PostNodes(nodes)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusBadRequest, err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())
@@ -234,7 +246,11 @@ func (api *NodeApi) bulkDelete(w http.ResponseWriter, req *http.Request) {
 	for _, node := range nodes["nodes"] {
 		names = append(names, node.Name)
 	}
-	result := nodeManager.DeleteNodes(names)
+	result, err := nodeManager.DeleteNodes(names)
+	if err != nil {
+		plog.HandleHttp(w, req, http.StatusBadRequest, err.Error())
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	if resp, err = json.Marshal(result); err != nil {
 		plog.HandleHttp(w, req, http.StatusInternalServerError, err.Error())

@@ -21,10 +21,7 @@ const (
 	TYPE_SHARE_LOCK
 	TYPE_EXCLUDE_LOCK
 
-	SLEEP_TICK    = 100 // millisecond
-	ACTION_DELETE = 1
-	ACTION_PUT    = 0
-	ACTION_NIL    = -1
+	SLEEP_TICK = 100 // millisecond
 
 	Maxint32 = 1<<31 - 1
 

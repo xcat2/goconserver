@@ -2,7 +2,6 @@ package console
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"github.com/xcat2/goconserver/common"
 	pb "github.com/xcat2/goconserver/console/consolepb"
@@ -25,11 +24,9 @@ const (
 	STATUS_CONNECTED
 	STATUS_ERROR
 	STATUS_NOTFOUND
-	STATUS_REDIRECT
 
-	CONSOLE_ON            = "on"
-	CONSOLE_OFF           = "off"
-	COMMAND_START_CONSOLE = "start_console"
+	CONSOLE_ON  = "on"
+	CONSOLE_OFF = "off"
 )
 
 var (
@@ -286,144 +283,64 @@ func AcceptWesocketClient(ws *websocket.Conn) error {
 	return nil
 }
 
-func (self *ConsoleServer) getConnectionInfo(conn interface{}) (string, string) {
-	var node, command string
-	var ok bool
-	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	size, err := common.Network.ReceiveIntTimeout(conn.(net.Conn), clientTimeout)
-	if err != nil {
-		conn.(net.Conn).Close()
-		return "", ""
-	}
-	b, err := common.Network.ReceiveBytesTimeout(conn.(net.Conn), size, clientTimeout)
-	if err != nil {
-		return "", ""
-	}
-	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
-	data := make(map[string]string)
-	if err := json.Unmarshal(b, &data); err != nil {
-		plog.Error(err)
-		err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
-		if err != nil {
-			plog.Error(err)
-		}
-		return "", ""
-	}
-	if node, ok = data["name"]; !ok {
-		plog.Error("Could not get the node from client")
-		return "", ""
-	}
-	if command, ok = data["command"]; !ok {
-		plog.Error("Could not get the command from client")
-		return "", ""
-	}
-	return node, command
-}
-
-func (self *ConsoleServer) redirect(conn interface{}, node string) {
-	var err error
-	nodeWithHost := nodeManager.stor.ListNodeWithHost()
-	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
-	if _, ok := nodeWithHost[node]; !ok {
-		plog.ErrorNode(node, "Could not find this node.")
-		err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
-		if err != nil {
-			plog.ErrorNode(node, err)
-		}
-		return
-	}
-	host := nodeWithHost[node]
-	err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_REDIRECT, clientTimeout)
-	if err != nil {
-		plog.ErrorNode(node, err)
-		return
-	}
-	err = common.Network.SendByteWithLength(conn.(net.Conn), []byte(host))
-	if err != nil {
-		plog.ErrorNode(node, err)
-		return
-	}
-	plog.InfoNode(node, fmt.Sprintf("Redirect the session to %s", host))
-}
-
 func (self *ConsoleServer) handle(conn interface{}) {
-	var err error
 	clientTimeout := time.Duration(serverConfig.Console.ClientTimeout)
 	plog.Debug("New client connection received.")
-	name, command := self.getConnectionInfo(conn)
-	if name == "" && command == "" {
-		conn.(net.Conn).Close()
+	node, err := serverHandshake(conn.(net.Conn))
+	if err != nil {
+		plog.Error(err)
 		return
 	}
-	nodeManager.RWlock.RLock()
-	if _, ok := nodeManager.Nodes[name]; !ok {
-		defer conn.(net.Conn).Close()
-		if !nodeManager.stor.SupportWatcher() {
-			plog.ErrorNode(name, "Could not find this node.")
-			err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_NOTFOUND, clientTimeout)
-			if err != nil {
-				plog.ErrorNode(name, err)
-			}
-			nodeManager.RWlock.RUnlock()
-			return
-		} else {
-			self.redirect(conn, name)
-		}
-		nodeManager.RWlock.RUnlock()
+	if node == nil {
+		// may be redirected to the other host
 		return
 	}
-	node := nodeManager.Nodes[name]
-	nodeManager.RWlock.RUnlock()
-	if command == COMMAND_START_CONSOLE {
-		if node.status != STATUS_CONNECTED {
-			// NOTE(chenglch): Get the lock at first, then allow to connect to the console target.
-			if err = node.RequireLock(false); err != nil {
-				plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-				err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
-				if err != nil {
-					plog.ErrorNode(name, err)
-				}
-				conn.(net.Conn).Close()
-				return
-			}
-			if node.status == STATUS_CONNECTED {
-				node.Release(false)
-			} else {
-				// NOTE(chenglch): Already got the lock, but the console connection is not established, start
-				// console at the backend.
-				go node.startConsole()
-				if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
-					plog.ErrorNode(node.StorageNode.Name, fmt.Sprintf("Could not start console, error: %s.", err))
-					node.Release(false)
-					err = common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
-					if err != nil {
-						plog.ErrorNode(name, err)
-					}
-					conn.(net.Conn).Close()
-					return
-				}
-				node.Release(false)
-			}
-		}
-		if node.status == STATUS_CONNECTED {
-			plog.InfoNode(node.StorageNode.Name, "Register client connection successfully.")
-			// reply success message to the client
-			err := common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_CONNECTED, clientTimeout)
+	if node.status != STATUS_CONNECTED {
+		// NOTE(chenglch): Get the lock at first, then allow to connect to the console target.
+		if err = node.RequireLock(false); err != nil {
+			msg := fmt.Sprintf("Could not start console, error: %s.", err)
+			plog.ErrorNode(node.StorageNode.Name, msg)
+			err = sendProtoMessage(conn.(net.Conn), msg, ACTION_SESSION_ERROR, clientTimeout)
 			if err != nil {
-				plog.ErrorNode(name, err)
-				conn.(net.Conn).Close()
-				return
-			}
-			node.console.Accept(conn.(net.Conn))
-		} else {
-			err := common.Network.SendIntWithTimeout(conn.(net.Conn), STATUS_ERROR, clientTimeout)
-			if err != nil {
-				plog.ErrorNode(name, err)
-				conn.(net.Conn).Close()
-				return
+				plog.ErrorNode(node.StorageNode.Name, err)
 			}
 			conn.(net.Conn).Close()
+			return
 		}
+		if node.status == STATUS_CONNECTED {
+			node.Release(false)
+		} else {
+			// NOTE(chenglch): Already got the lock, but the console connection is not established, start
+			// console at the backend.
+			go node.startConsole()
+			if err = common.TimeoutChan(node.ready, serverConfig.Console.TargetTimeout); err != nil {
+				node.Release(false)
+				msg := fmt.Sprintf("Could not start console, error: %s.", err)
+				plog.ErrorNode(node.StorageNode.Name, msg)
+				err = sendProtoMessage(conn.(net.Conn), msg, ACTION_SESSION_ERROR, clientTimeout)
+				if err != nil {
+					plog.ErrorNode(node.StorageNode.Name, err)
+				}
+				conn.(net.Conn).Close()
+				return
+			}
+			node.Release(false)
+		}
+	}
+	if node.status == STATUS_CONNECTED {
+		plog.InfoNode(node.StorageNode.Name, "Register client connection successfully.")
+		// reply success message to the client
+		err = sendProtoMessage(conn.(net.Conn), "", ACTION_SESSION_OK, clientTimeout)
+		if err != nil {
+			plog.ErrorNode(node.StorageNode.Name, err)
+		}
+		node.console.Accept(conn.(net.Conn))
+	} else {
+		err = sendProtoMessage(conn.(net.Conn), "Could not connect to console", ACTION_SESSION_ERROR, clientTimeout)
+		if err != nil {
+			plog.ErrorNode(node.StorageNode.Name, err)
+		}
+		conn.(net.Conn).Close()
 	}
 }
 
@@ -482,7 +399,7 @@ type NodeManager struct {
 	Nodes     map[string]*Node
 	RWlock    *sync.RWMutex
 	stor      storage.StorInterface
-	rpcServer *ConsoleRPCServer
+	rpcServer *ConsoleRpcServer
 	pipeline  *pl.Pipeline
 	hostname  string
 }
@@ -502,9 +419,7 @@ func GetNodeManager() *NodeManager {
 		if err != nil {
 			panic(err)
 		}
-		nodeManager.stor = stor
-		nodeManager.stor.ImportNodes()
-		nodeManager.importStorage()
+		nodeManager.importStorage(stor)
 		// start loggers
 		nodeManager.pipeline, err = pl.NewPipeline(&serverConfig.Console.Loggers)
 		if err != nil {
@@ -517,7 +432,7 @@ func GetNodeManager() *NodeManager {
 		go nodeManager.PersistWatcher()
 		go consoleServer.Listen()
 		if nodeManager.stor.SupportWatcher() {
-			nodeManager.rpcServer = newConsoleRPCServer()
+			nodeManager.rpcServer = newConsoleRpcServer()
 			nodeManager.rpcServer.serve()
 		}
 	}
@@ -525,9 +440,10 @@ func GetNodeManager() *NodeManager {
 }
 
 // Import storage.Nodes to NodeManager.Nodes
-func (self *NodeManager) importStorage() {
+func (self *NodeManager) importStorage(stor storage.StorInterface) {
+	stor.ImportNodes()
 	self.RWlock.Lock()
-	for k, v := range self.stor.GetNodes() {
+	for k, v := range stor.GetNodes() {
 		var node *Node
 		if _, ok := self.Nodes[k]; !ok {
 			node = NewNodeFromStor(v)
@@ -543,6 +459,7 @@ func (self *NodeManager) importStorage() {
 		self.Nodes[k] = node
 	}
 	self.RWlock.Unlock()
+	nodeManager.stor = stor
 }
 
 // export NodeManager.Nodes to storage.Nodes
@@ -601,31 +518,38 @@ func (self *NodeManager) ListNode() map[string][]map[string]string {
 		}
 		self.RWlock.RUnlock()
 	} else {
-		var host string
-		var node string
-		nodeWithHost := self.stor.ListNodeWithHost()
-		hosts := self.stor.GetHosts()
-		if hosts == nil {
+		nodeWithHost, err := self.stor.ListNodeWithHost()
+		if err != nil {
+			return nodes
+		}
+		endpoints, err := self.stor.GetVhosts()
+		if err != nil || len(endpoints) == 0 {
 			return nodes
 		}
 		statusMap := make(map[string]int)
-		for _, host = range hosts {
-			rpcClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
+		for vhost, config := range endpoints {
+			rpcClient, err := newConsoleRpcClient(config.Host, vhost)
+			if err != nil {
+				plog.Error(fmt.Sprintf("Could not init RpcClient instance, error: %s", err))
+				continue
+			}
 			rpcResult, err := rpcClient.ListNodesStatus()
 			if err != nil {
-				plog.Error(fmt.Sprintf("Could not get rpc result from host %s, Error: %s", host, err.Error()))
+				plog.Error(fmt.Sprintf("Could not get rpc result from host %s, Error: %s", config.Host, err.Error()))
 				continue
 			}
 			for k, v := range rpcResult {
 				statusMap[k] = v
 			}
 		}
-		for node, host = range nodeWithHost {
+		for node, vhost := range nodeWithHost {
 			nodeMap := make(map[string]string)
 			nodeMap["name"] = node
-			nodeMap["host"] = host
+			nodeMap["host"] = vhost
 			if status, ok := statusMap[node]; ok {
 				nodeMap["state"] = STATUS_MAP[status]
+			} else {
+				nodeMap["state"] = STATUS_MAP[STATUS_NOTFOUND]
 			}
 			nodes["nodes"] = append(nodes["nodes"], nodeMap)
 		}
@@ -644,14 +568,21 @@ func (self *NodeManager) ShowNode(name string) (*Node, int, string) {
 		self.RWlock.RUnlock()
 		node.State = STATUS_MAP[node.GetStatus()]
 	} else {
-		nodeWithHost := self.stor.ListNodeWithHost()
-		if nodeWithHost == nil {
+		nodeWithHost, err := self.stor.ListNodeWithHost()
+		if err != nil {
 			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
 		if _, ok := nodeWithHost[name]; !ok {
 			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		endpoint, err := self.stor.GetEndpoint(nodeWithHost[name])
+		if err != nil {
+			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
+		}
+		rpcClient, err := newConsoleRpcClient(endpoint.Host, nodeWithHost[name])
+		if err != nil {
+			return nil, http.StatusInternalServerError, err.Error()
+		}
 		pbNode, err := rpcClient.ShowNode(name)
 		if err != nil {
 			return nil, http.StatusInternalServerError, err.Error()
@@ -698,31 +629,41 @@ func (self *NodeManager) setConsoleState(nodes []string, state string) map[strin
 			}
 			result[v] = common.RESULT_UPDATED
 		}
-
 	}
 	return result
 }
 
-func (self *NodeManager) SetConsoleState(nodes []string, state string) map[string]string {
-	var host, node string
+func (self *NodeManager) SetConsoleState(nodes []string, state string) (map[string]string, error) {
+	var node, vhost string
 	var nodeList []string
 	if !self.stor.SupportWatcher() {
-		return self.setConsoleState(nodes, state)
+		return self.setConsoleState(nodes, state), nil
 	}
-	nodeWithHost := self.stor.ListNodeWithHost()
+	nodeWithHost, err := self.stor.ListNodeWithHost()
+	if err != nil {
+		return nil, err
+	}
 	hostNodes := make(map[string][]string, 0)
 	for _, node = range nodes {
 		if _, ok := nodeWithHost[node]; !ok {
 			plog.ErrorNode(node, "Skip this node as it is not exist.")
 			continue
 		}
-		host = nodeWithHost[node]
+		vhost = nodeWithHost[node]
 		//if hostNodes[]
-		hostNodes[host] = append(hostNodes[host], node)
+		hostNodes[vhost] = append(hostNodes[vhost], node)
 	}
 	result := make(map[string]string)
-	for host, nodeList = range hostNodes {
-		rpcClient := newConsoleRPCClient(host, serverConfig.Console.RPCPort)
+	for vhost, nodeList = range hostNodes {
+		endpoint, err := self.stor.GetEndpoint(vhost)
+		if err != nil {
+			continue
+		}
+		rpcClient, err := newConsoleRpcClient(endpoint.Host, vhost)
+		if err != nil {
+			plog.Error(fmt.Sprintf("Could not init RpcClient instance, error: %s", err))
+			continue
+		}
 		hostResult, err := rpcClient.SetConsoleState(nodeList, state)
 		if err != nil {
 			continue
@@ -731,35 +672,43 @@ func (self *NodeManager) SetConsoleState(nodes []string, state string) map[strin
 			result[k] = v
 		}
 	}
-	return result
+	return result, nil
+}
+
+func (self *NodeManager) postNode(storNode *storage.Node) (int, string) {
+	node := NewNodeFromStor(storNode)
+	if err := node.Validate(); err != nil {
+		return http.StatusBadRequest, err.Error()
+	}
+	self.RWlock.Lock()
+	if self.Exists(node.StorageNode.Name) {
+		self.RWlock.Unlock()
+		return http.StatusConflict, fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name)
+	}
+	node.SetStatus(STATUS_ENROLL)
+	self.Nodes[node.StorageNode.Name] = node
+	self.RWlock.Unlock()
+	plog.InfoNode(node.StorageNode.Name, "Created.")
+	if node.StorageNode.Ondemand == false {
+		go node.restartMonitor()
+		node.StartConsole()
+	}
+	return http.StatusAccepted, ""
 }
 
 func (self *NodeManager) PostNode(storNode *storage.Node) (int, string) {
+	var err error
 	if !self.stor.SupportWatcher() {
-		node := NewNodeFromStor(storNode)
-		if err := node.Validate(); err != nil {
-			return http.StatusBadRequest, err.Error()
+		code, msg := self.postNode(storNode)
+		if msg != "" {
+			return code, msg
 		}
-		self.RWlock.Lock()
-		if self.Exists(node.StorageNode.Name) {
-			self.RWlock.Unlock()
-			return http.StatusConflict, fmt.Sprintf("The node name %s is already exist", node.StorageNode.Name)
-		}
-		node.SetStatus(STATUS_ENROLL)
-		self.Nodes[node.StorageNode.Name] = node
-		self.RWlock.Unlock()
-		self.NotifyPersist(nil, common.ACTION_NIL)
-		plog.InfoNode(node.StorageNode.Name, "Created.")
-		if node.StorageNode.Ondemand == false {
-			go node.restartMonitor()
-			node.StartConsole()
-
-		}
+		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
-		storNodes := make(map[string][]storage.Node)
-		storNodes["nodes"] = make([]storage.Node, 0, 1)
-		storNodes["nodes"] = append(storNodes["nodes"], *storNode)
-		self.NotifyPersist(storNodes, common.ACTION_PUT)
+		err = self.NotifyPersist(storNode, storage.ACTION_PUT)
+	}
+	if err != nil {
+		return http.StatusBadRequest, err.Error()
 	}
 	return http.StatusAccepted, ""
 }
@@ -809,44 +758,58 @@ func (self *NodeManager) postNodes(storNodes []storage.Node, result map[string]s
 	}
 }
 
-func (self *NodeManager) PostNodes(storNodes map[string][]storage.Node) map[string]string {
+func (self *NodeManager) PostNodes(storNodes map[string][]storage.Node) (map[string]string, error) {
+	var err error
 	result := make(map[string]string)
 	if !self.stor.SupportWatcher() {
 		self.postNodes(storNodes["nodes"], result)
-		self.NotifyPersist(nil, common.ACTION_NIL)
+		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
 		for _, v := range storNodes["nodes"] {
 			result[v.Name] = common.RESULT_ACCEPTED
 		}
-		self.NotifyPersist(storNodes, common.ACTION_PUT)
+		err = self.NotifyPersist(storNodes["nodes"], storage.ACTION_MULTIPUT)
 	}
-	return result
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (self *NodeManager) deleteNode(nodeName string) (int, string) {
+	self.RWlock.Lock()
+	node, ok := self.Nodes[nodeName]
+	if !ok {
+		self.RWlock.Unlock()
+		return http.StatusBadRequest, fmt.Sprintf("Node %s is not exist", nodeName)
+	}
+	if node.StorageNode.Ondemand == false {
+		close(node.reconnect)
+	}
+	if node.GetStatus() == STATUS_CONNECTED {
+		if err := node.StopConsole(); err != nil {
+			self.RWlock.Unlock()
+			return http.StatusConflict, err.Error()
+		}
+	}
+	delete(self.Nodes, nodeName)
+	self.RWlock.Unlock()
+	return http.StatusAccepted, ""
 }
 
 func (self *NodeManager) DeleteNode(nodeName string) (int, string) {
+	var err error
 	if !self.stor.SupportWatcher() {
-		self.RWlock.Lock()
-		node, ok := self.Nodes[nodeName]
-		if !ok {
-			self.RWlock.Unlock()
-			return http.StatusBadRequest, fmt.Sprintf("Node %s is not exist", nodeName)
+		code, msg := self.deleteNode(nodeName)
+		if msg != "" {
+			return code, msg
 		}
-		if node.StorageNode.Ondemand == false {
-			close(node.reconnect)
-		}
-		if node.GetStatus() == STATUS_CONNECTED {
-			if err := node.StopConsole(); err != nil {
-				self.RWlock.Unlock()
-				return http.StatusConflict, err.Error()
-			}
-		}
-		delete(self.Nodes, nodeName)
-		self.RWlock.Unlock()
-		self.NotifyPersist(nil, common.ACTION_NIL)
+		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
-		names := make([]string, 0, 1)
-		names = append(names, nodeName)
-		self.NotifyPersist(names, common.ACTION_DELETE)
+		err = self.NotifyPersist(nodeName, storage.ACTION_DEL)
+	}
+	if err != nil {
+		return http.StatusBadRequest, err.Error()
 	}
 	return http.StatusAccepted, ""
 }
@@ -885,18 +848,22 @@ func (self *NodeManager) deleteNodes(names []string, result map[string]string) {
 	}
 }
 
-func (self *NodeManager) DeleteNodes(names []string) map[string]string {
+func (self *NodeManager) DeleteNodes(names []string) (map[string]string, error) {
+	var err error
 	result := make(map[string]string)
 	if !self.stor.SupportWatcher() {
 		self.deleteNodes(names, result)
-		self.NotifyPersist(nil, common.ACTION_NIL)
+		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
 		for _, name := range names {
 			result[name] = common.RESULT_ACCEPTED
 		}
-		self.NotifyPersist(names, common.ACTION_DELETE)
+		err = self.NotifyPersist(names, storage.ACTION_MULTIDEL)
 	}
-	return result
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (self *NodeManager) Replay(name string) (string, int, string) {
@@ -912,14 +879,21 @@ func (self *NodeManager) Replay(name string) (string, int, string) {
 			return "", http.StatusInternalServerError, err.Error()
 		}
 	} else {
-		nodeWithHost := self.stor.ListNodeWithHost()
-		if nodeWithHost == nil {
+		nodeWithHost, err := self.stor.ListNodeWithHost()
+		if err != nil {
 			return "", http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
 		if _, ok := nodeWithHost[name]; !ok {
 			return "", http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		endpoint, err := self.stor.GetEndpoint(nodeWithHost[name])
+		if err != nil {
+			return "", http.StatusInternalServerError, "Could not get host information, please check the storage connection"
+		}
+		rpcClient, err := newConsoleRpcClient(endpoint.Host, nodeWithHost[name])
+		if err != nil {
+			return "", http.StatusInternalServerError, err.Error()
+		}
 		content, err = rpcClient.GetReplayContent(name)
 		if err != nil {
 			return "", http.StatusInternalServerError, err.Error()
@@ -931,7 +905,6 @@ func (self *NodeManager) Replay(name string) (string, int, string) {
 func (self *NodeManager) ListUser(name string) (ret map[string][]string, code int, msg string) {
 	var node *Node
 	var users []string
-	var err error
 	var ok bool
 	ret = make(map[string][]string)
 	if !self.stor.SupportWatcher() {
@@ -950,14 +923,21 @@ func (self *NodeManager) ListUser(name string) (ret map[string][]string, code in
 		}()
 		users = node.console.ListSessionUser()
 	} else {
-		nodeWithHost := self.stor.ListNodeWithHost()
-		if nodeWithHost == nil {
+		nodeWithHost, err := self.stor.ListNodeWithHost()
+		if err != nil {
 			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
 		}
 		if _, ok := nodeWithHost[name]; !ok {
 			return nil, http.StatusBadRequest, fmt.Sprintf("Could not get host information for node %s", name)
 		}
-		rpcClient := newConsoleRPCClient(nodeWithHost[name], serverConfig.Console.RPCPort)
+		endpoint, err := self.stor.GetEndpoint(nodeWithHost[name])
+		if err != nil {
+			return nil, http.StatusInternalServerError, "Could not get host information, please check the storage connection"
+		}
+		rpcClient, err := newConsoleRpcClient(endpoint.Host, nodeWithHost[name])
+		if err != nil {
+			return nil, http.StatusInternalServerError, err.Error()
+		}
 		users, err = rpcClient.ListSessionUser(name)
 		if err != nil {
 			return nil, http.StatusInternalServerError, err.Error()
@@ -967,13 +947,13 @@ func (self *NodeManager) ListUser(name string) (ret map[string][]string, code in
 	return ret, http.StatusOK, ""
 }
 
-func (self *NodeManager) NotifyPersist(node interface{}, action int) {
+func (self *NodeManager) NotifyPersist(node interface{}, action int) error {
 	if !self.stor.SupportWatcher() {
 		storNodes := self.exportStorage()
-		self.stor.NotifyPersist(storNodes, common.ACTION_NIL)
-		return
+		self.stor.NotifyPersist(storNodes, storage.ACTION_NIL)
+		return nil
 	}
-	self.stor.NotifyPersist(node, action)
+	return self.stor.NotifyPersist(node, action)
 }
 
 func (self *NodeManager) Exists(nodeName string) bool {
@@ -988,27 +968,33 @@ func (self *NodeManager) PersistWatcher() {
 		self.stor.PersistWatcher(nil)
 		return
 	}
-	eventChan := make(chan map[int][]byte, 1024)
+	eventChan := make(chan interface{}, 128)
 	go self.stor.PersistWatcher(eventChan)
 	for {
-		select {
-		case eventMap := <-eventChan:
-			if _, ok := eventMap[common.ACTION_PUT]; ok {
-				storNode := storage.NewNode()
-				if err := json.Unmarshal(eventMap[common.ACTION_PUT], storNode); err != nil {
-					plog.Error(err)
-					return
-				}
-				storNodes := make([]storage.Node, 0, 1)
-				storNodes = append(storNodes, *storNode)
-				self.postNodes(storNodes, nil)
-			} else if _, ok := eventMap[common.ACTION_DELETE]; ok {
-				name := string(eventMap[common.ACTION_DELETE])
-				names := make([]string, 0, 1)
-				names = append(names, name)
-				self.deleteNodes(names, nil)
-			} else {
-				plog.Error("Internal error")
+		eventData, ok := (<-eventChan).(*storage.EventData)
+		if !ok {
+			continue
+		}
+		switch eventData.Action {
+		case storage.ACTION_PUT:
+			node, ok := eventData.Data.(*storage.Node)
+			if !ok {
+				plog.Error(common.ErrInvalidType)
+				break
+			}
+			_, msg := self.postNode(node)
+			if msg != "" {
+				plog.ErrorNode(node.Name, msg)
+			}
+		case storage.ACTION_DEL:
+			name, ok := eventData.Data.(string)
+			if !ok {
+				plog.Error(common.ErrInvalidType)
+				break
+			}
+			_, msg := self.deleteNode(name)
+			if msg != "" {
+				plog.ErrorNode(name, msg)
 			}
 		}
 	}

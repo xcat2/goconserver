@@ -22,6 +22,7 @@ const (
 	HOST_NOT_EXIST
 	INVALID_TYPE
 	ETCD_NOT_INIT
+	ETCD_TRANSACTION_ERROR
 	SET_DEADLINE_ERROR
 	SEND_KEEPALIVE_ERROR
 	LOGGER_TYPE_ERROR
@@ -42,7 +43,7 @@ var (
 	ErrLocked           = NewErr(LOCKED, "Locked")
 	ErrUnlocked         = NewErr(UNLOCKED, "Unlocked")
 	ErrConnection       = NewErr(CONNECTION_ERROR, "Could not connect")
-	ErrAlreadyExist     = NewErr(ALREADY_EXIST, "Already exit")
+	ErrAlreadyExist     = NewErr(ALREADY_EXIST, "Already exist")
 	ErrOutOfQuota       = NewErr(OUTOF_QUATA, "Out of quota")
 	ErrTimeout          = NewErr(TIMEOUT, "Timeout")
 	ErrLoggerType       = NewErr(LOGGER_TYPE_ERROR, "Invalid logger type")
@@ -51,10 +52,11 @@ var (
 	ErrNotTerminal = NewErr(NOT_TERMINAL, "Not terminal")
 	ErrInvalidType = NewErr(INVALID_TYPE, "Invalid type")
 	// ssh
-	ErrSetDeadline   = NewErr(SET_DEADLINE_ERROR, "failed to set deadline")
-	ErrSendKeepalive = NewErr(SEND_KEEPALIVE_ERROR, "failed to send keep alive")
+	ErrSetDeadline   = NewErr(SET_DEADLINE_ERROR, "Failed to set deadline")
+	ErrSendKeepalive = NewErr(SEND_KEEPALIVE_ERROR, "Failed to send keep alive")
 	// etcd
-	ErrETCDNotInit = NewErr(ETCD_NOT_INIT, "Etcd is not initialized")
+	ErrEtcdUnInit      = NewErr(ETCD_NOT_INIT, "Etcd is not initialized")
+	ErrETCDTransaction = NewErr(ETCD_TRANSACTION_ERROR, "Failed to submit etcd transaction")
 )
 
 func NewErr(code int, text string) *GoConsError {

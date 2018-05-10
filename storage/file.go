@@ -82,17 +82,21 @@ func (self *FileStorage) ImportNodes() {
 	}
 }
 
-func (self *FileStorage) NotifyPersist(nodes interface{}, action int) {
+func (self *FileStorage) NotifyPersist(nodes interface{}, action int) error {
+	if action != ACTION_NIL {
+		plog.Error(common.ErrUnsupported)
+	}
 	if reflect.TypeOf(nodes).Kind() == reflect.Map {
 		self.Nodes = nodes.(map[string]*Node)
 		common.Notify(self.pending, &self.persistence, 1)
 	} else {
 		plog.Error("Undefine persistance type")
 	}
+	return nil
 }
 
 // a separate thread to save the data, avoid of frequent IO
-func (self *FileStorage) PersistWatcher(eventChan chan map[int][]byte) {
+func (self *FileStorage) PersistWatcher(eventChan chan<- interface{}) {
 	common.Wait(self.pending, &self.persistence, 0, self.save)
 }
 
@@ -130,10 +134,18 @@ func (self *FileStorage) SupportWatcher() bool {
 	return false
 }
 
-func (self *FileStorage) ListNodeWithHost() map[string]string {
-	return nil
+func (self *FileStorage) ListNodeWithHost() (map[string]string, error) {
+	return nil, common.ErrUnsupported
 }
 
-func (self *FileStorage) GetHosts() []string {
-	return nil
+func (self *FileStorage) GetVhosts() (map[string]*EndpointConfig, error) {
+	return nil, common.ErrUnsupported
+}
+
+func (self *FileStorage) GetNodeCountEachHost() (map[string]int, error) {
+	return nil, common.ErrUnsupported
+}
+
+func (self *FileStorage) GetEndpoint(host string) (*EndpointConfig, error) {
+	return nil, common.ErrUnsupported
 }

@@ -12,17 +12,17 @@ import (
 	"net"
 )
 
-type ConsoleRPCServer struct {
+type ConsoleRpcServer struct {
 	port   string
 	host   string
 	server *grpc.Server
 }
 
-func newConsoleRPCServer() *ConsoleRPCServer {
-	return &ConsoleRPCServer{port: serverConfig.Console.RPCPort, host: serverConfig.Global.Host}
+func newConsoleRpcServer() *ConsoleRpcServer {
+	return &ConsoleRpcServer{port: serverConfig.Etcd.RpcPort, host: serverConfig.Global.Host}
 }
 
-func (self *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
+func (self *ConsoleRpcServer) ShowNode(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.Node, error) {
 	plog.Debug("Receive the RPC call ShowNode")
 	nodeManager.RWlock.RLock()
 	if !nodeManager.Exists(rpcNode.Name) {
@@ -40,7 +40,7 @@ func (self *ConsoleRPCServer) ShowNode(ctx net_context.Context, rpcNode *pb.Node
 	return &retNode, nil
 }
 
-func (self *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesStae *pb.NodesState) (*pb.Result, error) {
+func (self *ConsoleRpcServer) SetConsoleState(ctx net_context.Context, pbNodesStae *pb.NodesState) (*pb.Result, error) {
 	plog.Debug("Receive the RPC call SetConsoleState")
 	nodeManager.RWlock.RLock()
 	names := make([]string, 0, len(pbNodesStae.Names))
@@ -56,7 +56,7 @@ func (self *ConsoleRPCServer) SetConsoleState(ctx net_context.Context, pbNodesSt
 	return &pb.Result{Result: result}, nil
 }
 
-func (self *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
+func (self *ConsoleRpcServer) GetReplayContent(ctx net_context.Context, rpcNode *pb.NodeName) (*pb.ReplayContent, error) {
 	plog.Debug("Receive the RPC call GetReplayContent")
 	if !nodeManager.Exists(rpcNode.Name) {
 		plog.ErrorNode(rpcNode.Name, fmt.Sprintf("Not exist on %s", nodeManager.hostname))
@@ -70,7 +70,7 @@ func (self *ConsoleRPCServer) GetReplayContent(ctx net_context.Context, rpcNode 
 	return &pb.ReplayContent{Content: content}, nil
 }
 
-func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (pbUsers *pb.SessionUsers, err error) {
+func (self *ConsoleRpcServer) ListSessionUser(ctx net_context.Context, rpcNode *pb.NodeName) (pbUsers *pb.SessionUsers, err error) {
 	plog.Debug("Receive the RPC call ListSessionUser")
 	pbUsers = new(pb.SessionUsers)
 	nodeManager.RWlock.RLock()
@@ -92,7 +92,7 @@ func (self *ConsoleRPCServer) ListSessionUser(ctx net_context.Context, rpcNode *
 	return pbUsers, nil
 }
 
-func (self *ConsoleRPCServer) ListNodesStatus(ctx net_context.Context, empty *google_protobuf.Empty) (*pb.NodesStatus, error) {
+func (self *ConsoleRpcServer) ListNodesStatus(ctx net_context.Context, empty *google_protobuf.Empty) (*pb.NodesStatus, error) {
 	plog.Debug("Receive the RPC call ListNodesStatus")
 	nodesStatus := make(map[string]int32)
 	nodeManager.RWlock.RLock()
@@ -103,7 +103,7 @@ func (self *ConsoleRPCServer) ListNodesStatus(ctx net_context.Context, empty *go
 	return &pb.NodesStatus{NodesStatus: nodesStatus}, nil
 }
 
-func (self *ConsoleRPCServer) serve() {
+func (self *ConsoleRpcServer) serve() {
 	var creds credentials.TransportCredentials
 	var err error
 	var s *grpc.Server
@@ -129,16 +129,20 @@ func (self *ConsoleRPCServer) serve() {
 	go s.Serve(lis)
 }
 
-type ConsoleRPCClient struct {
+type ConsoleRpcClient struct {
 	host string
 	port string
 }
 
-func newConsoleRPCClient(host string, port string) *ConsoleRPCClient {
-	return &ConsoleRPCClient{host: host, port: port}
+func newConsoleRpcClient(host string, vhost string) (*ConsoleRpcClient, error) {
+	config, err := nodeManager.stor.GetEndpoint(vhost)
+	if err != nil {
+		return nil, err
+	}
+	return &ConsoleRpcClient{host: host, port: config.RpcPort}, nil
 }
 
-func (self *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
+func (self *ConsoleRpcClient) connect() (*grpc.ClientConn, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	var conn *grpc.ClientConn
@@ -168,7 +172,7 @@ func (self *ConsoleRPCClient) connect() (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func (self *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
+func (self *ConsoleRpcClient) ShowNode(name string) (*pb.Node, error) {
 	conn, err := self.connect()
 	if err != nil {
 		return nil, err
@@ -183,7 +187,7 @@ func (self *ConsoleRPCClient) ShowNode(name string) (*pb.Node, error) {
 	return node, nil
 }
 
-func (self *ConsoleRPCClient) SetConsoleState(names []string, state string) (map[string]string, error) {
+func (self *ConsoleRpcClient) SetConsoleState(names []string, state string) (map[string]string, error) {
 	conn, err := self.connect()
 	if err != nil {
 		return nil, err
@@ -198,7 +202,7 @@ func (self *ConsoleRPCClient) SetConsoleState(names []string, state string) (map
 	return pbResult.Result, nil
 }
 
-func (self *ConsoleRPCClient) GetReplayContent(name string) (string, error) {
+func (self *ConsoleRpcClient) GetReplayContent(name string) (string, error) {
 	conn, err := self.connect()
 	if err != nil {
 		return "", err
@@ -213,7 +217,7 @@ func (self *ConsoleRPCClient) GetReplayContent(name string) (string, error) {
 	return pbResult.Content, nil
 }
 
-func (self *ConsoleRPCClient) ListSessionUser(name string) ([]string, error) {
+func (self *ConsoleRpcClient) ListSessionUser(name string) ([]string, error) {
 	conn, err := self.connect()
 	if err != nil {
 		return nil, err
@@ -228,7 +232,7 @@ func (self *ConsoleRPCClient) ListSessionUser(name string) ([]string, error) {
 	return pbResult.Users, nil
 }
 
-func (self *ConsoleRPCClient) ListNodesStatus() (map[string]int, error) {
+func (self *ConsoleRpcClient) ListNodesStatus() (map[string]int, error) {
 	conn, err := self.connect()
 	if err != nil {
 		return nil, err

@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/xcat2/goconserver/api"
 	"github.com/xcat2/goconserver/common"
 	"io/ioutil"
@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	ServerCmd *cobra.Command
 	confFile  string
 	showVer   bool
 	help      bool
@@ -27,13 +26,9 @@ var (
 )
 
 func init() {
-	ServerCmd = &cobra.Command{
-		Use:   "goconserver",
-		Short: "This is goconserver damon service",
-		Long:  `goconserver daemon service`}
-	ServerCmd.Flags().StringVarP(&confFile, "config-file", "c", "/etc/goconserver/server.conf", "Specify the configuration file for goconserver daemon.")
-	ServerCmd.Flags().BoolVarP(&showVer, "version", "v", false, "Show the version of goconserver.")
-	ServerCmd.Flags().BoolVarP(&help, "help", "h", false, "Show the help message of goconserver.")
+	pflag.StringVarP(&confFile, "config-file", "c", "/etc/goconserver/server.conf", "Specify the configuration file for goconserver daemon.")
+	pflag.BoolVarP(&showVer, "version", "v", false, "Show version of goconserver.")
+	pflag.BoolVarP(&help, "help", "h", false, "Show help message of goconserver.")
 }
 
 func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {
@@ -54,9 +49,7 @@ func loadTlsConfig(serverConfig *common.ServerConfig) *tls.Config {
 }
 
 func main() {
-	if err := ServerCmd.Execute(); err != nil {
-		panic(err)
-	}
+	pflag.Parse()
 	if showVer {
 		fmt.Printf("Version: %s, BuildTime: %s Commit: %s\n", Version, BuildTime, Commit)
 		os.Exit(0)
