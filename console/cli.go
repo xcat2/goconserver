@@ -350,6 +350,7 @@ func (c *CongoCli) waitInput(args interface{}) {
 }
 
 func (c *CongoCli) console(cmd *cobra.Command, args []string) {
+	var quit chan struct{}
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
 		os.Exit(1)
@@ -361,25 +362,18 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 	retry := true
 	common.NewTaskManager(100, 16)
 	for retry {
-		client := NewConsoleClient(clientConfig.ServerHost, clientConfig.ConsolePort)
-		quit := make(chan struct{}, 0)
-		client.registerSignal(quit)
-		conn, err := client.Connect()
+		client, conn, err := initConsoleSessionClient(args[0], clientConfig.ServerHost, clientConfig.ConsolePort)
 		if err != nil {
-			fmt.Printf("\rCould not connect to %s\n", args[0])
-			panic(err)
+			fmt.Printf("\rCould not connect to %s, error: %s\n", args[0], err.Error())
+			os.Exit(1)
 		}
-		host, err := client.Handle(conn, args[0])
-		if err == nil && host != "" {
-			client = NewConsoleClient(host, clientConfig.ConsolePort)
-			conn, err = client.Connect()
+		if client != nil && conn != nil {
+			quit = make(chan struct{}, 0)
+			client.registerSignal(quit)
+			err = client.transport(conn, args[0])
 			if err != nil {
-				panic(err)
+				fmt.Printf("\rThe connection is disconnected\n")
 			}
-			_, err = client.Handle(conn, args[0])
-		}
-		if err != nil {
-			fmt.Printf("\rThe connection is disconnected\n")
 		}
 		if client.retry {
 			fmt.Println("[Enter `^Ec.' to exit]\r\nSession is teminated unexpectedly, retrying....")

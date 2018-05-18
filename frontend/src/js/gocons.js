@@ -1,4 +1,12 @@
 const STATUS_CONNECTED = 2;
+
+const ACTION_SESSION_ERROR = 0
+const ACTION_SESSION_START = 1
+const ACTION_SESSION_DROP = 2
+const ACTION_SESSION_REDIRECT = 3
+const ACTION_SESSION_OK = 4
+const ACTION_SESSION_RETRY = 5
+
 const Terminal = require('xterm').Terminal;
 Terminal.applyAddon(require('xterm/lib/addons/fit'));
 const host = window.location.host;
@@ -22,17 +30,33 @@ class ConsoleSession {
         this.usersDiv = usersDiv;
         this.url = (window.location.protocol === "https:" ? 'wss://' : 'ws://') + window.location.host + window.location.pathname + "session";
         this.ws = new WebSocket(this.url, ['tty']);
-        this.state = "unconnected";
+        this.action = ACTION_SESSION_START;
         this.term = this.openTerm();
         this.tlv = new TLVBuf();
         if (this.windowDiv) {
             $("#" + windowDiv).html("Console Window For " + node);
         }
+        this.initWs();
+        this.term.on('data', (data) => {
+            if (this.action != ACTION_SESSION_OK) {
+                return;
+            }
+            if (this.ws.readyState == 3) {
+                this.disable();
+                return;
+            }
+            if (data) {
+                this.ws.send(utils.int32toBytes(data.length) + data);
+            }
+        });
+    }
+    initWs() {
+        this.ws = new WebSocket(this.url, ['tty']);
         this.ws.onopen = function(event) {
             if (this.ws.readyState === WebSocket.OPEN) {
                 let msg = JSON.stringify({
-                    name: this.node,
-                    command: "start_console"
+                    node: this.node,
+                    action: ACTION_SESSION_START,
                 });
                 this.ws.send(utils.int32toBytes(msg.length) + msg);
                 this.getUser();
@@ -41,8 +65,15 @@ class ConsoleSession {
         }.bind(this);
 
         this.ws.onclose = function(event) {
-            console.log('Websocket connection closed with code: ' + event.code);
-            this.disable();
+            if (this.action == ACTION_SESSION_REDIRECT) {
+                if (this.timer) {
+                    clearInterval(this.timer);
+                }
+                this.initWs();
+            } else {
+                console.log('Websocket connection closed with code: ' + event.code);
+                this.disable();
+            }
         }.bind(this);
 
         this.ws.onmessage = (event) => {
@@ -55,31 +86,30 @@ class ConsoleSession {
             }
             // a work around to convert the data info base64 format to avoid of utf-8 error from websocket
             let data = Buffer.from(event.data, 'base64');
-            if (this.state == "unconnected") {
-                this.state = utils.bytesToInt32(data);
-                if (this.state != STATUS_CONNECTED) {
-                    console.log("Failed to start console, status=" + this.state)
-                    this.close();
+            let msg = this.getMessage(data);
+            if (this.action != ACTION_SESSION_OK && this.action != ACTION_SESSION_ERROR) {
+                let obj = JSON.parse(msg);
+                switch (obj.action) {
+                    case ACTION_SESSION_DROP:
+                        this.action = ACTION_SESSION_ERROR;
+                        console.log("Failed to start console, status=" + this.state)
+                        break;
+                    case ACTION_SESSION_OK:
+                        this.action = ACTION_SESSION_OK
+                        break;
+                    case ACTION_SESSION_REDIRECT:
+                        this.url = (window.location.protocol === "https:" ? 'wss://' : 'ws://') + obj.host + ":" + obj.api_port + window.location.pathname + "session";
+                        this.ws.close();
+                        this.action = ACTION_SESSION_REDIRECT
+                        break;
                 }
-            } else {
-                let msg = this.getMessage(data);
+            } else if (this.action == ACTION_SESSION_OK) {
                 if (msg) {
                     this.term.write(msg);
                 }
             }
         };
-        this.term.on('data', (data) => {
-            if (this.state != STATUS_CONNECTED) {
-                return;
-            }
-            if (this.ws.readyState == 3) {
-                this.disable();
-                return;
-            }
-            if (data) {
-                this.ws.send(utils.int32toBytes(data.length) + data);
-            }
-        });
+
     }
     openTerm() {
         let terminalContainer = document.getElementById(this.termBox);

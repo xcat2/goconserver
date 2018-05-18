@@ -80,6 +80,14 @@ source /etc/profile.d/congo.sh
 congo list
 ```
 
+### Start goconserver with xcat
+
+Currently `xcat` and `goconserver` are integrated with `file` storage type.
+Some reference doc could be found at
+
+- [rcons](http://xcat-docs.readthedocs.io/en/latest/guides/admin-guides/manage_clusters/ppc64le/management/basic/rcons.html)
+- [gocons](http://xcat-docs.readthedocs.io/en/latest/advanced/goconserver/index.html)
+
 ## Development
 
 ### Requirement
@@ -100,7 +108,7 @@ make install
 
 Please refer to [ssl](/scripts/ssl/)
 
-### Web Interface (ongoing)
+### Web Interface
 
 Setup nodejs(9.0+) and npm(5.6.0+) toolkit at first. An example steps could be
 found at [node env](/frontend/). Then follow the steps below:

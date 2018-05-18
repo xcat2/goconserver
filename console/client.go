@@ -2,11 +2,9 @@ package console
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"github.com/xcat2/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
-	"io"
 	"net"
 	"net/http"
 	neturl "net/url"
@@ -244,82 +242,35 @@ func (c *ConsoleClient) transCr(b []byte, n int) []byte {
 	return temp[0:j]
 }
 
-func (c *ConsoleClient) tryConnect(conn net.Conn, name string) (int, error) {
-	m := make(map[string]string)
-	m["name"] = name
-	m["command"] = COMMAND_START_CONSOLE
-	b, err := json.Marshal(m)
-	if err != nil {
-		printFatalErr(err)
-		return STATUS_ERROR, err
-	}
-	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
-	err = common.Network.SendByteWithLengthTimeout(conn, b, consoleTimeout)
-	if err != nil {
-		printFatalErr(err)
-		return STATUS_ERROR, err
-	}
-	status, err := common.Network.ReceiveIntTimeout(conn, consoleTimeout)
-	if err != nil {
-		if err == io.EOF && status == STATUS_NOTFOUND {
-			return STATUS_NOTFOUND, nil
-		}
-		printFatalErr(err)
-		return STATUS_ERROR, err
-	}
-	return status, nil
-}
-
-func (c *ConsoleClient) Handle(conn net.Conn, name string) (string, error) {
+func (c *ConsoleClient) transport(conn net.Conn, node string) error {
 	defer conn.Close()
+	var err error
 	recvBuf := make([]byte, common.BUF_SIZE)
 	sendBuf := make([]byte, common.BUF_SIZE)
-	consoleTimeout := time.Duration(clientConfig.ConsoleTimeout)
-	status, err := c.tryConnect(conn, name)
-	if status == STATUS_REDIRECT {
-		n, err := common.Network.ReceiveIntTimeout(conn, consoleTimeout)
-		if err != nil {
-			return "", err
-		}
-		b, err := common.Network.ReceiveBytesTimeout(conn, n, consoleTimeout)
-		if err != nil && err != io.EOF {
-			return "", err
-		}
-		plog.InfoNode(name, fmt.Sprintf("Redirect the node connecteion to %s", string(b)))
-		return string(b), nil
-	}
-	if status != STATUS_CONNECTED {
-		if status == STATUS_NOTFOUND {
-			printNodeNotfoundMsg(name)
-			os.Exit(1)
-		}
-		plog.ErrorNode(name, fmt.Sprintf("Fatal error: Could not connect to %s\n", name))
-		return "", common.ErrConnection
-	}
 	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
-		return "", common.ErrNotTerminal
+		return common.ErrNotTerminal
 	}
 	c.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer terminal.Restore(int(os.Stdin.Fd()), c.origState)
-	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, name, sendBuf)
+	c.inputTask, err = common.GetTaskManager().RegisterLoop(c.input, conn, node, sendBuf)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer common.GetTaskManager().Stop(c.inputTask.GetID())
 	printConsoleHelpPrompt()
 	c.outputTask, err = common.GetTaskManager().RegisterLoop(c.output, conn, recvBuf)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer common.GetTaskManager().Stop(c.outputTask.GetID())
 	select {
 	case <-c.exit:
 		break
 	}
-	return "", nil
+	return nil
 }
 
 func (s *ConsoleClient) Connect() (net.Conn, error) {
