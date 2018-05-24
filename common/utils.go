@@ -304,3 +304,17 @@ func ReadTail(path string, tail int) (string, error) {
 	}
 	return strings.Join(ret[cur:], "\n"), nil
 }
+
+func SafeWrite(writer io.Writer, b []byte) error {
+	n := len(b)
+	tmp := 0
+	for n > 0 {
+		count, err := writer.Write(b[tmp:])
+		if err != nil {
+			return err
+		}
+		tmp += count
+		n -= count
+	}
+	return nil
+}

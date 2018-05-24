@@ -32,10 +32,16 @@ func printConsoleSendErr(err error) {
 
 func printConsoleHelpMsg() {
 	fmt.Printf("\r\nHelp message from congo:\r\n" +
-		"Ctrl + e + c + .         Exit from console session  \r\n" +
-		"Ctrl + e + c + ?         Print the help message for console command \r\n" +
-		"Ctrl + e + c + r         Replay last lines (only for file_logger) \r\n" +
-		"Ctrl + e + c + w         Who is on this session \r\n")
+		"Ctrl + e + c + .                 Exit from console session\r\n" +
+		"Ctrl + e + c + ?                 Print the help message for console command\r\n" +
+		"Ctrl + e + c + r                 Replay last lines (only for file_logger)\r\n" +
+		"Ctrl + e + c + w                 Who is on this session\r\n" +
+		"Ctrl + e + c + l + [1-9]/?       Send break sequence to the remote\r\n")
+}
+
+func printBreakSequence(last byte) {
+	s := string([]byte{'^', 'E', ESCAPE_C, CLIENT_CMD_LOCAL, last})
+	fmt.Printf("\r\nBreak sequence %s pressed\r\n", s)
 }
 
 func printConsoleCmdErr(msg interface{}) {

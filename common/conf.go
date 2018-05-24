@@ -98,6 +98,11 @@ type EtcdCfg struct {
 	RpcPort string `yaml:"rpcport"`
 }
 
+type BreakSequenceCfg struct {
+	Sequence string `yaml:"sequence"`
+	Delay    int    `yaml:"delay"`
+}
+
 type ServerConfig struct {
 	Global struct {
 		Host          string `yaml:"host"`
@@ -115,16 +120,17 @@ type ServerConfig struct {
 		DistDir     string `yaml:"dist_dir"`
 	}
 	Console struct {
-		Port              string    `yaml:"port"`
-		DataDir           string    `yaml:"datadir"`
-		LogTimestamp      bool      `yaml:"log_timestamp"`
-		TimePrecision     string    `yaml:"time_precision"`
-		TimeFormat        string    `yaml:"-"`
-		ReplayLines       int       `yaml:"replay_lines"`
-		ClientTimeout     int       `yaml:"client_timeout"`
-		TargetTimeout     int       `yaml:"target_timeout"`
-		ReconnectInterval int       `yaml:"reconnect_interval"`
-		Loggers           LoggerCfg `yaml:"logger"`
+		Port              string             `yaml:"port"`
+		DataDir           string             `yaml:"datadir"`
+		LogTimestamp      bool               `yaml:"log_timestamp"`
+		TimePrecision     string             `yaml:"time_precision"`
+		TimeFormat        string             `yaml:"-"`
+		ReplayLines       int                `yaml:"replay_lines"`
+		ClientTimeout     int                `yaml:"client_timeout"`
+		TargetTimeout     int                `yaml:"target_timeout"`
+		ReconnectInterval int                `yaml:"reconnect_interval"`
+		Loggers           LoggerCfg          `yaml:"logger"`
+		BreakSequences    []BreakSequenceCfg `yaml:"break_sequence"`
 	}
 	Etcd EtcdCfg `yaml:"etcd"`
 }

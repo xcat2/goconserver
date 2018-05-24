@@ -18,8 +18,8 @@ import (
 type ConsoleClient struct {
 	host, port string
 	origState  *terminal.State
-	escape     int // client exit signal
 	cr         int
+	searcher   *EscapeSearcher
 	exit       chan struct{}
 	retry      bool
 	inputTask  *common.Task
@@ -35,7 +35,85 @@ func NewConsoleClient(host string, port string) *ConsoleClient {
 		retry:    true,
 		sigio:    make(chan struct{}, 1),
 		reported: false,
+		// clientEscape must not be nil
+		searcher: NewEscapeSearcher(clientEscape.root),
 	}
+}
+
+func (c *ConsoleClient) transCr(b []byte, n int) []byte {
+	temp := make([]byte, common.BUF_SIZE)
+	j := 0
+	for i := 0; i < n; i++ {
+		ch := b[i]
+		if c.cr == 0 {
+			if ch == ' ' {
+				c.cr = 1
+			} else {
+				temp[j] = ch
+				j++
+			}
+		} else if c.cr == 1 {
+			if ch == '\r' {
+				c.cr = 2
+			} else {
+				temp[j], temp[j+1] = ' ', ch
+				j += 2
+				c.cr = 0
+			}
+		} else if c.cr == 2 {
+			if ch == '\n' {
+				temp[j], temp[j+1], temp[j+2] = ' ', '\r', ch
+				j += 3
+			} else {
+				temp[j] = ch // ignore " \r"
+				j++
+			}
+			c.cr = 0
+		}
+	}
+	if c.cr == 1 {
+		c.cr = 0
+		temp[j] = ' '
+		j++
+	}
+	return temp[0:j]
+}
+
+func (client *ConsoleClient) processClientSession(conn net.Conn, b []byte, n int, node string) error {
+	j := 0
+	for i := 0; i < n; i++ {
+		ch := b[i]
+		// NOTE(chenglch): To avoid of the copy of the buffer, control the send buffer with index
+		buffered, handler, err := clientEscape.Search(conn, ch, client.searcher)
+		if err != nil {
+			return err
+		}
+		// if the character is buffered, send the buf before current character
+		if buffered {
+			if j < i && conn != nil {
+				err = common.Network.SendByteWithLength(conn.(net.Conn), b[j:i])
+				if err != nil {
+					return err
+				}
+			}
+			j = i + 1
+			continue
+		}
+		if handler != nil {
+			err = handler(conn, client, node, ch)
+			if err != nil {
+				return err
+			}
+			j = i + 1
+		}
+	}
+	if conn != nil {
+		err := common.Network.SendByteWithLength(conn.(net.Conn), b[j:n])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *ConsoleClient) input(args ...interface{}) {
@@ -77,17 +155,7 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	if n == 0 {
 		return
 	}
-	exit, pos := c.checkEscape(b, n, node)
-	if exit == true {
-		b = EXIT_SEQUENCE[0:]
-		n = len(b)
-		c.retry = false
-		printConsoleDisconnectPrompt()
-	}
-	if pos >= n {
-		return
-	}
-	common.Network.SendByteWithLength(conn.(net.Conn), b[pos:n])
+	c.processClientSession(conn.(net.Conn), b, n, node)
 }
 
 func (c *ConsoleClient) output(args ...interface{}) {
@@ -136,110 +204,6 @@ func (c *ConsoleClient) contains(cmds []byte, cmd byte) bool {
 		}
 	}
 	return false
-}
-
-func (c *ConsoleClient) runClientCmd(cmd byte, node string) {
-	if cmd == CLIENT_CMD_HELP {
-		printConsoleHelpMsg()
-	} else if cmd == CLIENT_CMD_REPLAY {
-		congo := NewCongoClient(clientConfig.HTTPUrl)
-		ret, err := congo.replay(node)
-		if err != nil {
-			if ret != "" {
-				printConsoleCmdErr(ret)
-			} else {
-				printConsoleCmdErr(err)
-			}
-			return
-		}
-		printConsoleReplay(ret)
-	} else if cmd == CLIENT_CMD_WHO {
-		congo := NewCongoClient(clientConfig.HTTPUrl)
-		ret, err := congo.listUser(node)
-		if err != nil {
-			if ret != nil {
-				printConsoleCmdErr(ret)
-			} else {
-				printConsoleCmdErr(err)
-			}
-			return
-		}
-		printCRLF()
-		for _, v := range ret["users"].([]interface{}) {
-			printConsoleUser(v.(string))
-		}
-	}
-}
-
-func (c *ConsoleClient) checkEscape(b []byte, n int, node string) (bool, int) {
-	pos := 0
-	for i := 0; i < n; i++ {
-		ch := b[i]
-		if c.escape == 0 {
-			if ch == '\x05' {
-				c.escape = 1
-				pos = i + 1
-			}
-		} else if c.escape == 1 {
-			if ch == 'c' {
-				c.escape = 2
-				pos = i + 1
-			} else {
-				c.escape = 0
-			}
-		} else if c.escape == 2 {
-			if ch == CLIENT_CMD_EXIT {
-				c.close()
-				return true, 0
-			} else if c.contains(CLIENT_CMDS, ch) {
-				c.runClientCmd(ch, node)
-				c.escape = 0
-				pos = i + 1
-			} else {
-				c.escape = 0
-			}
-		}
-	}
-	return false, pos
-}
-
-func (c *ConsoleClient) transCr(b []byte, n int) []byte {
-	temp := make([]byte, common.BUF_SIZE)
-	j := 0
-	for i := 0; i < n; i++ {
-		ch := b[i]
-		if c.cr == 0 {
-			if ch == ' ' {
-				c.cr = 1
-			} else {
-				temp[j] = ch
-				j++
-			}
-		} else if c.cr == 1 {
-			if ch == '\r' {
-				c.cr = 2
-			} else {
-				temp[j], temp[j+1] = ' ', ch
-				j += 2
-				c.cr = 0
-			}
-		} else if c.cr == 2 {
-			if ch == '\n' {
-				temp[j], temp[j+1], temp[j+2] = ' ', '\r', ch
-				j += 3
-			} else {
-				temp[j] = ch // ignore " \r"
-				j++
-			}
-			c.cr = 0
-		}
-	}
-	if c.cr == 1 {
-		c.cr = 0
-		temp[j] = ' '
-		j++
-	}
-	return temp[0:j]
 }
 
 func (c *ConsoleClient) transport(conn net.Conn, node string) error {
@@ -442,4 +406,17 @@ func (c *CongoClient) listUser(node string) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return ret.(map[string]interface{}), nil
+}
+
+func (c *CongoClient) listBreakSequence() ([]string, error) {
+	url := fmt.Sprintf("%s/breaksequence", c.baseUrl)
+	ret, err := c.client.Get(url, nil, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]string, 0)
+	for _, item := range ret.([]interface{}) {
+		items = append(items, item.(string))
+	}
+	return items, nil
 }
