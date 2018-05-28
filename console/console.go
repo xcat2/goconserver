@@ -12,18 +12,6 @@ import (
 	"time"
 )
 
-const (
-	CLIENT_CMD_EXIT   = '.'
-	CLIENT_CMD_HELP   = '?'
-	CLIENT_CMD_REPLAY = 'r'
-	CLIENT_CMD_WHO    = 'w'
-)
-
-var (
-	CLIENT_CMDS   = []byte{CLIENT_CMD_HELP, CLIENT_CMD_REPLAY, CLIENT_CMD_WHO}
-	EXIT_SEQUENCE = [...]byte{'\x05', 'c', '.'} // ctrl-e, c
-)
-
 type Console struct {
 	bufConn   map[net.Conn]chan []byte // build the map for the connection and the channel
 	remoteIn  io.Writer
@@ -33,6 +21,7 @@ type Console struct {
 	node      *Node
 	mutex     *sync.RWMutex
 	last      *pl.RemainBuffer // the rest of the buffer that has not been emitted
+	searcher  *EscapeSearcher
 }
 
 func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
@@ -44,6 +33,8 @@ func NewConsole(baseSession *plugins.BaseSession, node *Node) *Console {
 		running:   make(chan bool, 0),
 		mutex:     new(sync.RWMutex),
 		last:      new(pl.RemainBuffer),
+		// serverEscape must not be nil
+		searcher: NewEscapeSearcher(serverEscape.root),
 	}
 }
 
@@ -74,6 +65,38 @@ func (self *Console) Disconnect(conn net.Conn) {
 	}
 }
 
+func (self *Console) processTargetSession(writer io.Writer, b []byte) error {
+	var err error
+	j := 0
+	n := len(b)
+	for i := 0; i < n; i++ {
+		ch := b[i]
+		buffered, handler, err := serverEscape.Search(writer, ch, self.searcher)
+		if err != nil {
+			return err
+		}
+		if buffered {
+			if j < i {
+				err = common.SafeWrite(writer, b[j:i])
+				return err
+			}
+			j = i + 1
+			continue
+		}
+		if handler != nil {
+			if err = handler(writer, ch); err != nil {
+				return err
+			}
+			j = i + 1
+		}
+	}
+	err = common.SafeWrite(writer, b[j:n])
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (self *Console) writeTarget(conn net.Conn) {
 	plog.DebugNode(self.node.StorageNode.Name, "Create new connection to read message from client.")
 	defer func() {
@@ -98,19 +121,15 @@ func (self *Console) writeTarget(conn net.Conn) {
 			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to receive message from client. Error:%s.", err.Error()))
 			return
 		}
+
 		if bytes.Equal(b, EXIT_SEQUENCE[0:]) {
 			plog.InfoNode(self.node.StorageNode.Name, "Received exit signal from client")
 			return
 		}
-		tmp := 0
-		for n > 0 {
-			count, err := self.remoteIn.Write(b[tmp:])
-			if err != nil {
-				plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
-				return
-			}
-			tmp += count
-			n -= count
+		err = self.processTargetSession(self.remoteIn, b)
+		if err != nil {
+			plog.WarningNode(self.node.StorageNode.Name, fmt.Sprintf("Failed to send message to the remote server. Error:%s.", err.Error()))
+			return
 		}
 	}
 }

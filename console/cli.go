@@ -306,7 +306,6 @@ func (c *CongoCli) waitInput(args interface{}) {
 		terminal.Restore(int(os.Stdin.Fd()), client.origState)
 		if exit == true {
 			if err == nil {
-				fmt.Printf("Disconnected\n")
 				os.Exit(0)
 			} else {
 				fmt.Fprintf(os.Stderr, err.Error())
@@ -345,7 +344,14 @@ func (c *CongoCli) waitInput(args interface{}) {
 			exit = true
 			return
 		}
-		exit, _ = client.checkEscape(b, n, "")
+		err = client.processClientSession(nil, b, n, "")
+		if err != nil {
+			fmt.Printf("\r\nError : %s\r\n", err.Error())
+			return
+		}
+		if client.retry == false {
+			exit = true
+		}
 	}
 }
 
@@ -361,6 +367,7 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 	}
 	retry := true
 	common.NewTaskManager(100, 16)
+	clientEscape = NewEscapeClientSystem()
 	for retry {
 		client, conn, err := initConsoleSessionClient(args[0], clientConfig.ServerHost, clientConfig.ConsolePort)
 		if err != nil {

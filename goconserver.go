@@ -71,6 +71,7 @@ func main() {
 	api.Router = mux.NewRouter().StrictSlash(true)
 	api.NewNodeApi(api.Router)
 	api.NewCommandApi(api.Router)
+	api.NewEscapeApi(api.Router)
 	if serverConfig.API.DistDir != "" {
 		api.RegisterBackendHandler(api.Router)
 	}

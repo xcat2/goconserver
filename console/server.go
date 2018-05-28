@@ -425,6 +425,7 @@ func GetNodeManager() *NodeManager {
 		if err != nil {
 			panic(err)
 		}
+		serverEscape = NewEscapeServerSystem()
 		// for linelogger to send the last buffer
 		go nodeManager.PeriodicTask()
 		runtime.GOMAXPROCS(serverConfig.Global.Worker)
