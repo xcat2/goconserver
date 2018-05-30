@@ -1,7 +1,5 @@
 GOPATH?=$(shell pwd)
 export GOPATH
-PATH+=:$(shell pwd)/bin
-export PATH
 GITHUB_DIR=${GOPATH}/src/github.com/xcat2/
 REPO_DIR=${GOPATH}/src/github.com/xcat2/goconserver
 CURRENT_DIR=$(shell pwd)
@@ -11,6 +9,7 @@ SERVER_CONF_FILE=/etc/goconserver/server.conf
 CLIENT_CONF_FILE=~/congo.sh
 SERVER_BINARY=goconserver
 CLIENT_BINARY=congo
+SHELL=/bin/bash
 COMMIT=$(shell git rev-parse HEAD)
 ARCH=$(shell uname -m)
 PLATFORM=$(shell uname)
@@ -70,12 +69,13 @@ install: build
 		cp etc/goconserver/client.sh /etc/profile.d/congo.sh; \
 	fi
 
-tar: build
+tar: build frontend
 	mkdir -p build/goconserver_${PLATFORM}_${ARCH}; \
 	cp -r etc build/goconserver_${PLATFORM}_${ARCH}; \
 	cp -r scripts build/goconserver_${PLATFORM}_${ARCH}; \
 	cp ${SERVER_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
 	cp ${CLIENT_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
+	cp -r build/dist build/goconserver_${PLATFORM}_${ARCH}; \
 	cd build/goconserver_${PLATFORM}_${ARCH}; \
 	ln -s scripts/setup.sh setup.sh; \
 	cd - ;\

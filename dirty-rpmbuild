@@ -112,6 +112,7 @@ mkdir -p \$RPM_BUILD_ROOT/%{prefix}
 %config(noreplace) /etc/profile.d/congo.sh
 /etc/goconserver
 %config(noreplace) /etc/goconserver/server.conf
+/usr/share/goconserver/dist/
 /usr/lib/systemd/system/goconserver.service
 /usr/bin/goconserver
 /usr/bin/congo

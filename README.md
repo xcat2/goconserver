@@ -35,7 +35,7 @@ api interface.
 ### Storage plugins
 
 - file: Store the host information in a json file.
-- etcd: Support goconserver cluster [experimental].
+- etcd: Support goconserver cluster.
 
 ### Multiple client types
 
@@ -114,6 +114,7 @@ Setup nodejs(9.0+) and npm(5.6.0+) toolkit at first. An example steps could be
 found at [node env](/frontend/). Then follow the steps below:
 
 ```
+yum install gcc-c++
 npm install -g gulp webpack webpack-cli
 make frontend
 ```
