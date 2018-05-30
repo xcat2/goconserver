@@ -146,11 +146,13 @@ func serverHandshake(conn net.Conn) (*Node, error) {
 	}
 	b, err := common.Network.ReceiveBytesTimeout(conn, n, clientTimeout)
 	if err != nil {
+		conn.Close()
 		plog.Error(err)
 		return nil, err
 	}
 	plog.Debug(fmt.Sprintf("Receive connection from client: %s", string(b)))
 	if err := json.Unmarshal(b, &m); err != nil {
+		defer conn.Close()
 		tempErr := err
 		plog.Error(err)
 		err = sendProtoMessage(conn, err.Error(), ACTION_SESSION_ERROR, clientTimeout)
@@ -158,10 +160,10 @@ func serverHandshake(conn net.Conn) (*Node, error) {
 			plog.ErrorNode(name, err)
 			return nil, err
 		}
-		conn.Close()
 		return nil, tempErr
 	}
 	if m.Action != ACTION_SESSION_START || m.Node == "" {
+		conn.Close()
 		return nil, common.ErrConnection
 	}
 	name = m.Node
@@ -179,6 +181,7 @@ func serverHandshake(conn net.Conn) (*Node, error) {
 		}
 		err = redirect(conn, name)
 		if err != nil {
+			conn.Close()
 			return nil, err
 		}
 		return nil, nil
