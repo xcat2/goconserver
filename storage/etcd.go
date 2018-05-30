@@ -89,7 +89,6 @@ func (self *EtcdStorage) keepalive(ready chan<- struct{}) {
 }
 
 func (self *EtcdStorage) GetEndpoint(vhost string) (*EndpointConfig, error) {
-	fmt.Println(EtcdKeyJoin(ENDPOINT_PREFIX, vhost))
 	b, err := self.client.Get(EtcdKeyJoin(ENDPOINT_PREFIX, vhost))
 	if err != nil {
 		return nil, err
@@ -155,21 +154,14 @@ func (self *EtcdStorage) GetNodeCountEachHost() (map[string]int, error) {
 }
 
 func (self *EtcdStorage) ListNodeWithHost() (map[string]string, error) {
-	hosts, err := self.GetVhosts()
+	nodeToHost := make(map[string]string)
+	resp, err := self.client.Keys(EtcdKeyJoin(NODE_PREFIX))
 	if err != nil {
-		plog.Error(err)
 		return nil, err
 	}
-	nodeToHost := make(map[string]string)
-	for host, _ := range hosts {
-		resp, err := self.client.Keys(EtcdKeyJoin(NODE_PREFIX, host))
-		if err != nil {
-			return nil, err
-		}
-		for _, k := range resp {
-			temp := strings.Split(string(k), "/")
-			nodeToHost[temp[len(temp)-1]] = host
-		}
+	for _, k := range resp {
+		temp := strings.Split(string(k), "/")
+		nodeToHost[temp[len(temp)-1]] = temp[len(temp)-2]
 	}
 	return nodeToHost, nil
 }
