@@ -59,7 +59,7 @@ func newEtcdStorage() StorInterface {
 		etcdStor.vhost = hostname
 	}
 	etcdStor.host = serverConfig.Global.Host
-	if etcdStor.host == "" {
+	if etcdStor.host == "" || etcdStor.host == "0.0.0.0" {
 		etcdStor.host = hostname
 	}
 	// As client is used to send keepalive request, the client would not be closed
@@ -79,8 +79,9 @@ func (self *EtcdStorage) keepalive(ready chan<- struct{}) {
 	if err != nil {
 		panic(err)
 	}
+	s := string(b)
 	for {
-		err := self.client.RegisterAndKeepalive(EtcdKeyJoin(LOCK_PREFIX, self.vhost), EtcdKeyJoin(ENDPOINT_PREFIX, self.vhost), string(b), ready)
+		err := self.client.RegisterAndKeepalive(EtcdKeyJoin(LOCK_PREFIX, self.vhost), EtcdKeyJoin(ENDPOINT_PREFIX, self.vhost), s, ready)
 		if err != nil {
 			plog.Error("Failed to register service")
 		}

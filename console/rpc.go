@@ -146,13 +146,13 @@ func (self *ConsoleRpcClient) connect() (*grpc.ClientConn, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	var conn *grpc.ClientConn
-	if serverConfig.Global.SSLCACertFile != "" && serverConfig.Global.SSLKeyFile != "" && serverConfig.Global.SSLCertFile != "" {
+	if serverConfig.Etcd.RpcClientCACertFile != "" && serverConfig.Etcd.RpcClientKeyFile != "" && serverConfig.Etcd.RpcClientCertFile != "" {
 		tlsConfig, err := common.LoadClientTlsConfig(
-			serverConfig.Global.SSLCertFile,
-			serverConfig.Global.SSLKeyFile,
-			serverConfig.Global.SSLCACertFile,
+			serverConfig.Etcd.RpcClientCertFile,
+			serverConfig.Etcd.RpcClientKeyFile,
+			serverConfig.Etcd.RpcClientCACertFile,
 			self.host,
-			false)
+			serverConfig.Etcd.RpcInsucure)
 		if err != nil {
 			panic(err)
 		}
