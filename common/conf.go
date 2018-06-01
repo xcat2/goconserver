@@ -94,8 +94,12 @@ type EtcdCfg struct {
 	SSLCertFile      string `yaml:"ssl_cert_file"`
 	SSLCACertFile    string `yaml:"ssl_ca_cert_file"`
 	// vhost is the name registered in etcd service, by default it is the hostname
-	Vhost   string `yaml:"vhost`
-	RpcPort string `yaml:"rpcport"`
+	Vhost               string `yaml:"vhost`
+	RpcPort             string `yaml:"rpcport"`
+	RpcClientKeyFile    string `yaml:"rpc_client_key_file"`
+	RpcClientCertFile   string `yaml:"rpc_client_cert_file"`
+	RpcClientCACertFile string `yaml:"rpc_client_ca_cert_file"`
+	RpcInsucure         bool   `yaml:"rpc_insucure"`
 }
 
 type BreakSequenceCfg struct {
