@@ -2,6 +2,7 @@ package console
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"github.com/xcat2/goconserver/common"
 	pb "github.com/xcat2/goconserver/console/consolepb"
@@ -706,6 +707,17 @@ func (self *NodeManager) PostNode(storNode *storage.Node) (int, string) {
 		}
 		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
+		m, err := self.stor.ListNodeWithHost()
+		if err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		if _, ok := m[storNode.Name]; ok {
+			return http.StatusBadRequest, common.ErrAlreadyExist.Error()
+		}
+		_, err = self.validate(*storNode)
+		if err != nil {
+			return http.StatusBadRequest, err.Error()
+		}
 		err = self.NotifyPersist(storNode, storage.ACTION_PUT)
 	}
 	if err != nil {
@@ -714,44 +726,45 @@ func (self *NodeManager) PostNode(storNode *storage.Node) (int, string) {
 	return http.StatusAccepted, ""
 }
 
+func (self *NodeManager) validate(storNode storage.Node) (*Node, error) {
+	var msg string
+	if storNode.Name == "" {
+		msg = "Skip this record as node name is not defined"
+		plog.Error(msg)
+		return nil, errors.New(msg)
+	}
+	if storNode.Driver == "" {
+		msg = "Driver is not defined."
+		plog.ErrorNode(storNode.Name, msg)
+		return nil, errors.New(msg)
+	}
+	node := NewNodeFromStor(&storNode)
+	if err := node.Validate(); err != nil {
+		plog.ErrorNode(node.StorageNode.Name, err.Error())
+		return nil, err
+	}
+	return node, nil
+}
+
 func (self *NodeManager) postNodes(storNodes []storage.Node, result map[string]string) {
 	for i := 0; i < len(storNodes); i++ {
-		if storNodes[i].Name == "" {
-			plog.Error("Skip this record as node name is not defined.")
-			continue
-		}
-		if storNodes[i].Driver == "" {
-			msg := "Driver is not defined."
-			plog.ErrorNode(storNodes[i].Name, msg)
-			if result != nil {
-				result[storNodes[i].Name] = msg
-			}
-			continue
-		}
-		node := NewNodeFromStor(&storNodes[i])
-		if err := node.Validate(); err != nil {
-			plog.ErrorNode(node.StorageNode.Name, err.Error())
-			if result != nil {
-				result[node.StorageNode.Name] = err.Error()
-			}
+		node, err := self.validate(storNodes[i])
+		if err != nil && storNodes[i].Name != "" {
+			result[storNodes[i].Name] = err.Error()
 			continue
 		}
 		self.RWlock.Lock()
 		if self.Exists(node.StorageNode.Name) {
 			msg := "Skip this node as node is exist."
 			plog.ErrorNode(node.StorageNode.Name, msg)
-			if result != nil {
-				result[node.StorageNode.Name] = msg
-			}
+			result[node.StorageNode.Name] = msg
 			self.RWlock.Unlock()
 			continue
 		}
 		node.SetStatus(STATUS_ENROLL)
 		self.Nodes[node.StorageNode.Name] = node
 		self.RWlock.Unlock()
-		if result != nil {
-			result[node.StorageNode.Name] = common.RESULT_CREATED
-		}
+		result[node.StorageNode.Name] = common.RESULT_CREATED
 		if node.StorageNode.Ondemand == false {
 			go node.restartMonitor()
 			node.StartConsole()
@@ -766,8 +779,23 @@ func (self *NodeManager) PostNodes(storNodes map[string][]storage.Node) (map[str
 		self.postNodes(storNodes["nodes"], result)
 		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
+		m, err := self.stor.ListNodeWithHost()
+		if err != nil {
+			return nil, err
+		}
 		for _, v := range storNodes["nodes"] {
-			result[v.Name] = common.RESULT_ACCEPTED
+			if _, ok := m[v.Name]; ok {
+				result[v.Name] = common.ErrAlreadyExist.Error()
+				continue
+			}
+			_, err = self.validate(v)
+			if err != nil {
+				if v.Name != "" {
+					result[v.Name] = err.Error()
+				}
+				continue
+			}
+			result[v.Name] = common.RESULT_CREATED
 		}
 		err = self.NotifyPersist(storNodes["nodes"], storage.ACTION_MULTIPUT)
 	}
@@ -807,6 +835,13 @@ func (self *NodeManager) DeleteNode(nodeName string) (int, string) {
 		}
 		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
+		m, err := self.stor.ListNodeWithHost()
+		if err != nil {
+			return http.StatusInternalServerError, err.Error()
+		}
+		if _, ok := m[nodeName]; !ok {
+			return http.StatusBadRequest, common.ErrNodeNotExist.Error()
+		}
 		err = self.NotifyPersist(nodeName, storage.ACTION_DEL)
 	}
 	if err != nil {
@@ -856,8 +891,16 @@ func (self *NodeManager) DeleteNodes(names []string) (map[string]string, error) 
 		self.deleteNodes(names, result)
 		err = self.NotifyPersist(nil, storage.ACTION_NIL)
 	} else {
+		m, err := self.stor.ListNodeWithHost()
+		if err != nil {
+			return nil, err
+		}
 		for _, name := range names {
-			result[name] = common.RESULT_ACCEPTED
+			if _, ok := m[name]; !ok {
+				result[name] = common.ErrNodeNotExist.Error()
+			} else {
+				result[name] = common.RESULT_DELETED
+			}
 		}
 		err = self.NotifyPersist(names, storage.ACTION_MULTIDEL)
 	}
