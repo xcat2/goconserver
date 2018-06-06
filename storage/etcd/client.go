@@ -29,7 +29,7 @@ func NewEtcdClient(config *common.EtcdCfg) (*EtcdClient, error) {
 	var err error
 	var tlsInfo transport.TLSInfo
 	var tlsConfig *tls.Config
-	endpoints := strings.Split(config.Endpoints, " ")
+	endpoints := strings.Split(config.Endpoints, ",")
 	if len(endpoints) < 1 {
 		plog.Error("Invalid parameter: etcd endpoints, ip/hostname list separated with space should be specified.")
 		return nil, common.ErrInvalidParameter
