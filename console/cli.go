@@ -5,11 +5,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/xcat2/goconserver/common"
 	"golang.org/x/crypto/ssh/terminal"
+	"net"
 	"os"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -282,7 +284,9 @@ func (c *CongoCli) consoleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "console <node>",
 		Short: "Connect to the console server to start the terminal session",
-		Long: `Connect to the console server to start the terminal session. Format: congo console <node>.
+		Long: `Connect to the console server to start the terminal session. Format: congo console <node>[,<node>].
+If only one node is specified, console session is in interactive mode(read-write).
+If multiple nodes separated with comma are specifed, console session is in broadcast mode(write-only).
 Note: The console connection will not be shutdown until enter the sequence keys 'ctrl+e+c+.'`,
 		Run: c.console,
 	}
@@ -355,29 +359,19 @@ func (c *CongoCli) waitInput(args interface{}) {
 	}
 }
 
-func (c *CongoCli) console(cmd *cobra.Command, args []string) {
+func (c *CongoCli) interactive(node string) {
 	var quit chan struct{}
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
-		os.Exit(1)
-	}
-	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) || strings.HasPrefix("\\", args[0]) {
-		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' ,'\\' or '/'\n")
-		os.Exit(1)
-	}
 	retry := true
-	common.NewTaskManager(100, 16)
-	clientEscape = NewEscapeClientSystem()
 	for retry {
-		client, conn, err := initConsoleSessionClient(args[0], clientConfig.ServerHost, clientConfig.ConsolePort)
+		client, conn, err := initConsoleSessionClient(node, clientConfig.ServerHost, clientConfig.ConsolePort, CLIENT_INTERACTIVE_MODE)
 		if err != nil {
-			fmt.Printf("\rCould not connect to %s, error: %s\n", args[0], err.Error())
+			fmt.Printf("\rCould not connect to %s, error: %s\n", node, err.Error())
 			os.Exit(1)
 		}
 		if client != nil && conn != nil {
 			quit = make(chan struct{}, 0)
 			client.registerSignal(quit)
-			err = client.transport(conn, args[0])
+			err = client.transport(conn, node)
 			if err != nil {
 				fmt.Printf("\rThe connection is disconnected\n")
 			}
@@ -398,4 +392,90 @@ func (c *CongoCli) console(cmd *cobra.Command, args []string) {
 		close(quit)
 		retry = client.retry
 	}
+}
+
+func (c *CongoCli) broadcast(nodes []string) {
+	var err error
+	n := len(nodes)
+	clients := make([]*ConsoleClient, n)
+	conns := make([]net.Conn, n)
+	i := 0
+	for _, node := range nodes {
+		client, conn, err := initConsoleSessionClient(node, clientConfig.ServerHost, clientConfig.ConsolePort, CLIENT_BROADCAST_MODE)
+		if err != nil {
+			fmt.Printf("\rCould not connect to %s, error: %s\n", node, err.Error())
+			os.Exit(1)
+		}
+		if client != nil && conn != nil {
+			clients[i] = client
+			conns[i] = conn.(net.Conn)
+			i++
+			fmt.Printf("\r\n%s: Console session has been established", node)
+		} else {
+			fmt.Printf("\r\n%s: Unexpected error", node)
+			os.Exit(1)
+		}
+	}
+	client := clients[0]
+	client.origState, err = terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		fmt.Printf("\r\nFail to switch the terminal to raw mode, Error: %v\n", err)
+		return
+	}
+	defer terminal.Restore(int(os.Stdin.Fd()), client.origState)
+	quit := make(chan struct{}, 0)
+	// only register signal for first client
+	client.registerSignal(quit)
+	bufChan := make(chan []byte, 8)
+	// use the first client to accept the buffer from stdin
+	task, err := common.GetTaskManager().RegisterLoop(client.appendInput, bufChan)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	defer common.GetTaskManager().Stop(task.GetID())
+	fmt.Printf("\r\nEnter the key to broadcast the buffer. [Enter '^Ec.' to exit]\r\n")
+	var wg sync.WaitGroup
+	for {
+		b := <-bufChan
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				err = clients[i].processClientSession(conns[i], b, len(b), nodes[i])
+				if err != nil {
+					fmt.Printf("\r\n%s:%s", nodes[i], err.Error())
+				}
+			}(i)
+		}
+		wg.Wait()
+		for i := 0; i < n; i++ {
+			if clients[i].reported {
+				// has error close all of the client then return
+				for j := 0; j < n; j++ {
+					clients[j].close()
+				}
+				return
+			}
+		}
+	}
+}
+
+func (c *CongoCli) console(cmd *cobra.Command, args []string) {
+	if len(args) != 1 {
+		fmt.Fprintf(os.Stderr, "Usage: congo console <node>\n")
+		os.Exit(1)
+	}
+	if strings.HasPrefix(".", args[0]) || strings.HasPrefix("/", args[0]) || strings.HasPrefix("\\", args[0]) {
+		fmt.Fprintf(os.Stderr, "Error: node name could not start with '.' ,'\\' or '/'\n")
+		os.Exit(1)
+	}
+	nodes := strings.Split(args[0], ",")
+	common.NewTaskManager(100, 16)
+	clientEscape = NewEscapeClientSystem()
+	if len(nodes) == 1 {
+		c.interactive(nodes[0])
+		return
+	}
+	c.broadcast(nodes)
 }
