@@ -80,7 +80,7 @@ func clientEscapeExitHandler(conn net.Conn, c interface{}, node string, last byt
 		}
 	}
 	client.retry = false
-	printConsoleDisconnectPrompt()
+	printConsoleDisconnectPrompt(client.mode, node)
 	return nil
 }
 

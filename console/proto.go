@@ -69,8 +69,8 @@ func sendProtoMessage(conn net.Conn, msg string, action int, timeout time.Durati
 	return nil
 }
 
-func initConsoleSessionClient(node string, host string, consolePort string) (*ConsoleClient, net.Conn, error) {
-	client := NewConsoleClient(host, consolePort)
+func initConsoleSessionClient(node string, host string, consolePort string, mode int) (*ConsoleClient, net.Conn, error) {
+	client := NewConsoleClient(host, consolePort, mode)
 	conn, err := client.Connect()
 	if err != nil {
 		return nil, nil, err
@@ -85,7 +85,7 @@ func initConsoleSessionClient(node string, host string, consolePort string) (*Co
 		return nil, nil, errors.New(m.Msg)
 	case ACTION_SESSION_REDIRECT:
 		conn.Close()
-		return initConsoleSessionClient(node, m.Host, m.ConsolePort)
+		return initConsoleSessionClient(node, m.Host, m.ConsolePort, mode)
 	case ACTION_SESSION_OK:
 		return client, conn, nil
 	case ACTION_SESSION_RETRY:

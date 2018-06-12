@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	CLIENT_INTERACTIVE_MODE = iota
+	CLIENT_BROADCAST_MODE
+)
+
 type ConsoleClient struct {
 	host, port string
 	origState  *terminal.State
@@ -26,9 +31,10 @@ type ConsoleClient struct {
 	outputTask *common.Task
 	sigio      chan struct{}
 	reported   bool // error already reported
+	mode       int  // broadcast, interactive
 }
 
-func NewConsoleClient(host string, port string) *ConsoleClient {
+func NewConsoleClient(host string, port string, mode int) *ConsoleClient {
 	return &ConsoleClient{host: host,
 		port:     port,
 		exit:     make(chan struct{}, 0),
@@ -37,6 +43,7 @@ func NewConsoleClient(host string, port string) *ConsoleClient {
 		reported: false,
 		// clientEscape must not be nil
 		searcher: NewEscapeSearcher(clientEscape.root),
+		mode:     mode,
 	}
 }
 
@@ -158,6 +165,47 @@ func (c *ConsoleClient) input(args ...interface{}) {
 	c.processClientSession(conn.(net.Conn), b, n, node)
 }
 
+func (c *ConsoleClient) appendInput(args interface{}) {
+	bufChan := args.(chan []byte)
+	b := make([]byte, common.BUF_SIZE)
+	in := int(os.Stdin.Fd())
+	n := 0
+	err := common.Fcntl(in, syscall.F_SETFL, syscall.O_ASYNC|syscall.O_NONBLOCK)
+	if err != nil {
+		return
+	}
+	if runtime.GOOS != "darwin" {
+		err = common.Fcntl(in, syscall.F_SETOWN, syscall.Getpid())
+		if err != nil {
+			return
+		}
+	}
+	select {
+	case _, ok := <-c.sigio:
+		if !ok {
+			return
+		}
+		for {
+			size, err := syscall.Read(in, b[n:])
+			if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+				break
+			}
+			n += size
+		}
+		if err != nil && err != syscall.EAGAIN && err != syscall.EWOULDBLOCK {
+			if c.reported == false {
+				fmt.Println(err)
+			}
+			c.close()
+			return
+		}
+	}
+	if n == 0 {
+		return
+	}
+	bufChan <- b[:n]
+}
+
 func (c *ConsoleClient) output(args ...interface{}) {
 	b := args[0].([]interface{})[1].([]byte)
 	conn := args[0].([]interface{})[0].(net.Conn)
@@ -237,8 +285,8 @@ func (c *ConsoleClient) transport(conn net.Conn, node string) error {
 	return nil
 }
 
-func (s *ConsoleClient) Connect() (net.Conn, error) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", s.host, s.port))
+func (c *ConsoleClient) Connect() (net.Conn, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", c.host, c.port))
 	if err != nil {
 		printFatalErr(err)
 		os.Exit(1)
@@ -265,7 +313,7 @@ func (s *ConsoleClient) Connect() (net.Conn, error) {
 			clientConfig.SSLCertFile,
 			clientConfig.SSLKeyFile,
 			clientConfig.SSLCACertFile,
-			s.host,
+			c.host,
 			clientConfig.Insecure)
 		if err != nil {
 			panic(err)

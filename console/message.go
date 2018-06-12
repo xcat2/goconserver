@@ -71,6 +71,10 @@ func printFatalErr(err error) {
 	fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 }
 
-func printConsoleDisconnectPrompt() {
-	fmt.Printf("[Disconnected]\r\n")
+func printConsoleDisconnectPrompt(mode int, node string) {
+	if mode == CLIENT_INTERACTIVE_MODE {
+		fmt.Printf("[Disconnected]\r\n")
+		return
+	}
+	fmt.Printf("%s: [Disconnected]\r\n", node)
 }
