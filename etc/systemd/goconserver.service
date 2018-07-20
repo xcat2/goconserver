@@ -1,6 +1,7 @@
 [Unit]
 Description=goconserver console daemon
 Documentation=https://github.com/xcat2/goconserver
+After=network.target
 
 [Service]
 LimitNOFILE=65535
@@ -8,7 +9,6 @@ ExecStart=/usr/bin/goconserver
 ExecStop=/bin/kill -TERM $MAINPID
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
-After=network.target
 
 [Install]
 WantedBy=multi-user.target
