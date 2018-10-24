@@ -210,6 +210,7 @@ func (self *ByteLogger) insertStamp(b []byte, newLine *bool) ([]byte, error) {
 			*newLine = false
 		}
 		if b[i] == '\n' {
+                       // add 1 to the index in order to also write the newline characater. Slicing of the array only contains p to i-1 if not add 1
 			buf.Write(b[p:i+1])
 			*newLine = true
 			p = i + 1
