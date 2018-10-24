@@ -206,11 +206,12 @@ func (self *ByteLogger) insertStamp(b []byte, newLine *bool) ([]byte, error) {
 	}()
 	for i := 0; i < len(b); i++ {
 		if *newLine {
-			buf.WriteString("\n[" + time.Now().Format(common.RFC3339_SECOND) + "] ")
+			buf.WriteString("[" + time.Now().Format(common.RFC3339_SECOND) + "] ")
 			*newLine = false
 		}
 		if b[i] == '\n' {
-			buf.Write(b[p:i])
+                       // add 1 to the index in order to also write the newline characater. Slicing of the array only contains p to i-1 if not add 1
+			buf.Write(b[p:i+1])
 			*newLine = true
 			p = i + 1
 		}
