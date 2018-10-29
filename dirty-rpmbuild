@@ -105,6 +105,12 @@ goconserver is written in golang and is a part of microservice of xcat3. It can 
 %install
 mkdir -p \$RPM_BUILD_ROOT/%{prefix}
 ( cd \$RPM_BUILD_ROOT/%{prefix} && tar xfz - ) <%{SOURCE0}
+%post
+if [ "\$1" = 2 ]; then
+    if ps axf | grep -v grep | grep \/usr\/bin\/goconserver >/dev/null ; then
+        systemctl restart goconserver.service
+    fi
+fi
 
 %clean
 
@@ -119,6 +125,12 @@ mkdir -p \$RPM_BUILD_ROOT/%{prefix}
 /var/lib/goconserver
 /var/log/goconserver
 /var/log/goconserver/nodes/
+
+%preun
+if [ "\$1" = 0 ]; then
+    systemctl stop goconserver.service    
+    systemctl disable goconserver.service
+fi
 
 EOF
 
