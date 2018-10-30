@@ -107,9 +107,8 @@ mkdir -p \$RPM_BUILD_ROOT/%{prefix}
 ( cd \$RPM_BUILD_ROOT/%{prefix} && tar xfz - ) <%{SOURCE0}
 %post
 if [ "\$1" = 2 ]; then
-    if ps axf | grep -v grep | grep \/usr\/bin\/goconserver >/dev/null ; then
-        systemctl restart goconserver.service
-    fi
+    systemctl daemon-reload
+    systemctl try-restart goconserver.service
 fi
 
 %clean
