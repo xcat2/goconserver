@@ -109,4 +109,26 @@ goconserver (${VERSION:-0.0.1}-snap$(date '+%Y%m%d%H%M')) experimental; urgency=
  -- GONG Jie <gongjie@linux.vnet.ibm.com>  $(date -R)
 EOF
 
+cat <<-EOF >"${EXTRACT_DIR}/debian/postinst"
+#!/bin/sh
+
+if [ "\$1" = "configure" ]
+then
+    systemctl daemon-reload
+    systemctl try-restart goconserver.service
+fi
+EOF
+chmod 0755 "${EXTRACT_DIR}/debian/postinst"
+
+cat <<-EOF >"${EXTRACT_DIR}/debian/prerm"
+#!/bin/sh
+
+if [ "\$1" = "remove" ]
+then
+    systemctl stop goconserver.service
+    systemctl disable goconserver.service
+fi
+EOF
+chmod 0755 "${EXTRACT_DIR}/debian/prerm"
+
 ( cd "${EXTRACT_DIR}" && debian/rules binary )
