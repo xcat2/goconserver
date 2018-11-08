@@ -8,17 +8,15 @@ function check_linux_distro()
     echo "${distro}"
 }
 
-build_dir=/goconserver_build
-if [ ${DEST} ]; then
-    build_dir=${DEST}
-fi
+pkgname="goconserver"
+
+build_dir=${DEST:-/${pkgname}_build}
 mkdir -p $build_dir
 
 XCAT_BUILD_DISTRO="$(check_linux_distro)"
-echo "[INFO] Start to build goconserver on $XCAT_BUILD_DISTRO"
+echo "[INFO] Start to build $pkgname on $XCAT_BUILD_DISTRO"
 
-cur_path=$(cd "$(dirname "$0")"; pwd)
-cd $cur_path
+cd "$(dirname "$0")"
 
 case "${XCAT_BUILD_DISTRO}" in
 "centos"|"fedora"|"rhel"|"sles")
@@ -28,7 +26,7 @@ case "${XCAT_BUILD_DISTRO}" in
     pkgtype="deb"
     ;;
 *)
-    echo "[ERROR] ${XCAT_BUILD_DISTRO}: unsupported Linux distribution to build goconserver"
+    echo "[ERROR] ${XCAT_BUILD_DISTRO}: unsupported Linux distribution to build $pkgname"
     exit 1
     ;;
 esac
@@ -45,9 +43,9 @@ if [ $? != 0 ]; then
     exit 1
 fi
 
-buildpath=`find . -name "goconserver*.$pkgtype" | xargs ls -t | head -n 1`
+buildpath=`find . -name "${pkgname}*.$pkgtype" | xargs ls -t | head -n 1`
 if [ -z "$buildpath" ]; then
-    echo "[ERROR] Could not find build goconserver*.$pkgtype"
+    echo "[ERROR] Could not find build ${pkgname}*.$pkgtype"
     exit 1
 fi
 
