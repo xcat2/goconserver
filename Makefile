@@ -9,6 +9,7 @@ SERVER_CONF_FILE=/etc/goconserver/server.conf
 CLIENT_CONF_FILE=~/congo.sh
 SERVER_BINARY=goconserver
 CLIENT_BINARY=congo
+LICENSE_FILE=LICENSE.html
 SHELL=/bin/bash
 COMMIT=$(shell git rev-parse HEAD)
 ARCH=$(shell uname -m)
@@ -76,6 +77,7 @@ tar: build frontend
 	cp ${SERVER_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
 	cp ${CLIENT_BINARY} build/goconserver_${PLATFORM}_${ARCH}; \
 	cp -r build/dist build/goconserver_${PLATFORM}_${ARCH}; \
+	cp ${LICENSE_FILE} build/goconserver_${PLATFORM}_${ARCH}; \
 	cd build/goconserver_${PLATFORM}_${ARCH}; \
 	ln -s scripts/setup.sh setup.sh; \
 	cd - ;\

@@ -96,7 +96,7 @@ BuildRoot: /var/tmp/%{name}-%{version}-%{release}-root
 Source0: ${GOCONSERVER_REPACK_TARBALL}
 
 %description
-goconserver is written in golang and is a part of microservice of xcat3. It can work as a independent tool to provide the terminal session service. Terminal session could run in the background and help logging the terminal content.
+goconserver is written in golang and is a part of microservice of xCAT. It can work as a independent tool to provide the terminal session service. Terminal session could run in the background and help log the terminal content.
 
 %prep
 
@@ -118,6 +118,7 @@ fi
 /etc/goconserver
 %config(noreplace) /etc/goconserver/server.conf
 /usr/share/goconserver/dist/
+/usr/share/goconserver/doc/LICENSE.html
 /usr/lib/systemd/system/goconserver.service
 /usr/bin/goconserver
 /usr/bin/congo

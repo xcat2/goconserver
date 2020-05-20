@@ -87,6 +87,7 @@ mkdir -p "${TMP_DIR}/repack/usr/lib/systemd/system"
 mkdir -p "${TMP_DIR}/repack/var/log/goconserver/nodes"
 mkdir -p "${TMP_DIR}/repack/var/lib/goconserver"
 mkdir -p "${TMP_DIR}/repack/usr/share/goconserver/dist"
+mkdir -p "${TMP_DIR}/repack/usr/share/goconserver/doc"
 chmod 0700 "${TMP_DIR}/repack/etc/goconserver" \
 	"${TMP_DIR}/repack/var/log/goconserver" \
 	"${TMP_DIR}/repack/var/log/goconserver/nodes" \
@@ -110,6 +111,9 @@ install -o root -g root -m 0644 \
 install -o root -g root -m 0644 -D \
 	"${TMP_DIR}/extract/goconserver_linux_${ARCH}/dist/"* \
 	"${TMP_DIR}/repack/usr/share/goconserver/dist"
+install -o root -g root -m 0644 -D \
+	"${TMP_DIR}/extract/goconserver_linux_${ARCH}/LICENSE.html"* \
+	"${TMP_DIR}/repack/usr/share/goconserver/doc"
 
 ( cd "${TMP_DIR}/repack" && tar cfz - *) >"${GOCONSERVER_REPACK_TARBALL}"
 
