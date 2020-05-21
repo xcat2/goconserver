@@ -118,7 +118,7 @@ fi
 /etc/goconserver
 %config(noreplace) /etc/goconserver/server.conf
 /usr/share/goconserver/dist/
-/usr/share/goconserver/doc/LICENSE.html
+/usr/share/doc/goconserver/LICENSE.html
 /usr/lib/systemd/system/goconserver.service
 /usr/bin/goconserver
 /usr/bin/congo
