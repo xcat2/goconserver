@@ -93,9 +93,9 @@ sed -i -e 's/^Architecture: .*$/Architecture: '"${ARCH}"'/' \
 	"${EXTRACT_DIR}/debian/control"
 cat <<-EOF >>"${EXTRACT_DIR}/debian/control"
 Description: Independent tool to provide terminal session service.
- goconserver is written in golang and is a part of microservice of xcat3. It
+ goconserver is written in golang and is a part of microservice of xCAT. It
  can work as a independent tool to provide the terminal session service.
- Terminal session could run in the background and help logging the terminal
+ Terminal session could run in the background and help log the terminal
  content.
 EOF
 
